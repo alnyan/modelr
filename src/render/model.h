@@ -7,26 +7,38 @@
 #include "shader.h"
 #include <vector>
 
+struct VertexBuffer {
+    int flags = 0;
+    GLuint vertexCount;
+    GLuint bufferIDs[5];
+};
+
 class MeshBuilder {
 public:
-    MeshBuilder();
+    MeshBuilder(bool hasNormalMap = true);
 
+    void genTangents();
     void uploadMesh();
 
     void texCoord(GLfloat u, GLfloat v);
     void normal(GLfloat nx, GLfloat ny, GLfloat nz);
     void vertex(GLfloat x, GLfloat y, GLfloat z);
 
-    GLuint vertexBufferID, texCoordBufferID, normalBufferID;
-    size_t vertexCount = 0;
+    VertexBuffer buffer;
 private:
-    std::vector<GLfloat> m_vertexData, m_texCoordData, m_normalData;
+    std::vector<GLfloat> m_vertexData,
+                         m_texCoordData,
+                         m_normalData,
+                         m_tangentData,
+                         m_bitangentData;
+
+    bool m_genTangents;
     GLfloat m_nx, m_ny, m_nz, m_u, m_v;
 };
 
 class Model {
 public:
-    Model(size_t sz, GLuint vid, GLuint tid, GLuint nid, Material *mt);
+    Model(VertexBuffer b, Material *mt);
     ~Model();
 
     void render(Shader *shader);
@@ -37,5 +49,5 @@ private:
 
     size_t m_vertexCount = 0;
     Material *m_material = nullptr;
-    GLuint m_vertexBufferID = 0, m_normalBufferID = 0, m_texCoordBufferID = 0;
+    VertexBuffer m_buffer;
 };

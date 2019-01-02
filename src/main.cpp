@@ -76,9 +76,11 @@ void render(void) {
         glm::vec3(0, 1, 0)
     );
 
-    auto resMatrix = s_projectionMatrix * s_viewMatrix;
-    auto l = s_shader->getUniformLocation("mMatrix");
-    glUniformMatrix4fv(l, 1, GL_FALSE, &resMatrix[0][0]);
+    auto l = s_shader->getUniformLocation("mProjectionMatrix");
+    glUniformMatrix4fv(l, 1, GL_FALSE, &s_projectionMatrix[0][0]);
+
+    l = s_shader->getUniformLocation("mCameraMatrix");
+    glUniformMatrix4fv(l, 1, GL_FALSE, &s_viewMatrix[0][0]);
 
     l = s_shader->getUniformLocation("mCameraPosition");
     glUniform3f(l, eyePos.x, eyePos.y, eyePos.z);
