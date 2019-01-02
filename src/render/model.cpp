@@ -2,7 +2,6 @@
 #include <glm/glm.hpp>
 #include <fstream>
 #include <iostream>
-#include <vector>
 #include <stdio.h>
 #include <string.h>
 #include <list>
@@ -15,22 +14,58 @@ using ObjTexCoords = glm::vec<2, float>;
 
 //
 
-Model::Model(const float *vertices, const float *texCoords, const float *normals, Material *mat, size_t count): m_material{mat} {
-    glCreateBuffers(1, &m_vertexBufferID);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vertexBufferID);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * count, vertices, GL_STATIC_DRAW);
-    m_vertexCount = count;
-    if (normals) {
-        glCreateBuffers(1, &m_normalBufferID);
-        glBindBuffer(GL_ARRAY_BUFFER, m_normalBufferID);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * count, normals, GL_STATIC_DRAW);
-    }
-    if (texCoords) {
-        glCreateBuffers(1, &m_texCoordBufferID);
-        glBindBuffer(GL_ARRAY_BUFFER, m_texCoordBufferID);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * count, texCoords, GL_STATIC_DRAW);
+MeshBuilder::MeshBuilder() {
+    glCreateBuffers(1, &vertexBufferID);
+    glCreateBuffers(1, &texCoordBufferID);
+    glCreateBuffers(1, &normalBufferID);
+    m_u = m_v = 0;
+    m_nx = m_ny = m_nz = 0;
+}
+
+void MeshBuilder::uploadMesh() {
+    if (vertexCount) {
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 3 * vertexCount, &m_vertexData[0], GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, texCoordBufferID);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 2 * vertexCount, &m_texCoordData[0], GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, normalBufferID);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 3 * vertexCount, &m_normalData[0], GL_STATIC_DRAW);
     }
 }
+
+void MeshBuilder::texCoord(GLfloat u, GLfloat v) {
+    m_u = u;
+    m_v = v;
+}
+
+void MeshBuilder::normal(GLfloat nx, GLfloat ny, GLfloat nz) {
+    m_nx = nx;
+    m_ny = ny;
+    m_nz = nz;
+}
+
+void MeshBuilder::vertex(GLfloat x, GLfloat y, GLfloat z) {
+    m_texCoordData.push_back(m_u);
+    m_texCoordData.push_back(m_v);
+    m_normalData.push_back(m_nx);
+    m_normalData.push_back(m_ny);
+    m_normalData.push_back(m_nz);
+    m_vertexData.push_back(x);
+    m_vertexData.push_back(y);
+    m_vertexData.push_back(z);
+    m_u = m_v = 0;
+    m_nx = m_ny = m_nz = 0;
+    ++vertexCount;
+}
+
+//
+
+Model::Model(size_t ns, GLuint vid, GLuint tid, GLuint nid, Material *mat):
+    m_material{mat},
+    m_vertexBufferID{vid},
+    m_texCoordBufferID{tid},
+    m_normalBufferID{nid},
+    m_vertexCount{ns} {}
 
 Model::~Model() {
     if (m_vertexBufferID) {
@@ -145,40 +180,27 @@ static int objParseFace(const char *line, ObjVertexIndex &idx) {
     return n;
 }
 
-template<typename T> static bool objFaceTriangle(const std::vector<ObjVertexCoords> &vs,
+static bool objFaceTriangle(const std::vector<ObjVertexCoords> &vs,
                         const std::vector<ObjTexCoords> &ts,
                         const std::vector<ObjVertexCoords> &ns,
-                        std::vector<float> &vertices,
-                        std::vector<float> &texCoords,
-                        std::vector<float> &normals,
-                        const T &idx) {
-    int v = 0;
-    for (const auto &i: idx) {
-        if (i.x < 0 || i.x >= vs.size()) {
+                        MeshBuilder &mesh,
+                        const ObjVertexIndex &idx) {
+    auto it = idx.begin();
+    for (int i = 0; i < 3; ++i) {
+        auto p = *it++;
+        if (p.x < 0 || p.x >= vs.size() || p.z < 0 || p.z >= ns.size()) {
             return false;
         }
 
-        if (i.z < 0 || i.z >= ns.size()) {
-            return false;
-        }
+        mesh.normal(ns[p.z].x, ns[p.z].y, ns[p.z].z);
 
-        vertices.push_back(vs[i.x].x);
-        vertices.push_back(vs[i.x].y);
-        vertices.push_back(vs[i.x].z);
-
-        if (i.y < 0 || i.y >= ts.size()) {
-            texCoords.push_back(v != 0);
-            texCoords.push_back(v == 1);
+        if (p.y < 0 || p.y >= ts.size()) {
+            mesh.texCoord(i != 0, i == 2);
         } else {
-            texCoords.push_back(ts[i.y].x);
-            texCoords.push_back(ts[i.y].y);
+            mesh.texCoord(ts[p.y].x, ts[p.y].y);
         }
 
-        normals.push_back(ns[i.z].x);
-        normals.push_back(ns[i.z].y);
-        normals.push_back(ns[i.z].z);
-
-        ++v;
+        mesh.vertex(vs[p.x].x, vs[p.x].y, vs[p.x].z);
     }
 
     return true;
@@ -187,88 +209,26 @@ template<typename T> static bool objFaceTriangle(const std::vector<ObjVertexCoor
 static bool objFaceQuad(const std::vector<ObjVertexCoords> &vs,
                         const std::vector<ObjTexCoords> &ts,
                         const std::vector<ObjVertexCoords> &ns,
-                        std::vector<float> &vertices,
-                        std::vector<float> &texCoords,
-                        std::vector<float> &normals,
+                        MeshBuilder &mesh,
                         const ObjVertexIndex &idx) {
     auto i0 = idx.begin();
-    auto i1 = idx.begin();
-    ++i1;
-    ++i1;
+    ObjVertexIndex t0, t1;
 
-    for (int _ = 0; _ < 3; ++_) {
-        auto i = *i0++;
+    t0.push_back(*i0);      // 0: 0
+    t1.push_back(*i0++);    // 1: 0
+    t0.push_back(*i0++);    // 0: 0 1
+    t1.push_back(*i0);      // 1: 0 2
+    t0.push_back(*i0++);    // 0: 0 1 2
+    t1.push_back(*i0);      // 1: 0 2 3
 
-        if (i.x < 0 || i.x >= vs.size()) {
-            return false;
-        }
-
-        if (i.z < 0 || i.z >= ns.size()) {
-            return false;
-        }
-
-        vertices.push_back(vs[i.x].x);
-        vertices.push_back(vs[i.x].y);
-        vertices.push_back(vs[i.x].z);
-        normals.push_back(ns[i.z].x);
-        normals.push_back(ns[i.z].y);
-        normals.push_back(ns[i.z].z);
-    }
-
-    for (int _ = 0; _ < 2; ++_) {
-        auto i = *i1++;
-
-        if (i.x < 0 || i.x >= vs.size()) {
-            return false;
-        }
-
-        if (i.z < 0 || i.z >= ns.size()) {
-            return false;
-        }
-
-        vertices.push_back(vs[i.x].x);
-        vertices.push_back(vs[i.x].y);
-        vertices.push_back(vs[i.x].z);
-        normals.push_back(ns[i.z].x);
-        normals.push_back(ns[i.z].y);
-        normals.push_back(ns[i.z].z);
-    }
-
-    auto i = *(idx.begin());
-
-    if (i.x < 0 || i.x >= vs.size()) {
-        return false;
-    }
-
-    if (i.z < 0 || i.z >= ns.size()) {
-        return false;
-    }
-
-    vertices.push_back(vs[i.x].x);
-    vertices.push_back(vs[i.x].y);
-    vertices.push_back(vs[i.x].z);
-    normals.push_back(ns[i.z].x);
-    normals.push_back(ns[i.z].y);
-    normals.push_back(ns[i.z].z);
-
-    texCoords.push_back(0);
-    texCoords.push_back(0);
-    texCoords.push_back(1);
-    texCoords.push_back(0);
-    texCoords.push_back(1);
-    texCoords.push_back(1);
-    texCoords.push_back(1);
-    texCoords.push_back(1);
-    texCoords.push_back(0);
-    texCoords.push_back(1);
-    texCoords.push_back(0);
-    texCoords.push_back(0);
-
-    return true;
+    return
+        objFaceTriangle(vs, ts, ns, mesh, t0) &&
+        objFaceTriangle(vs, ts, ns, mesh, t1);
 }
 
 Model *Model::loadObj(const std::string &path) {
     std::ifstream file(path);
+    Material *mat = nullptr;
 
     if (!file) {
         return nullptr;
@@ -278,10 +238,7 @@ Model *Model::loadObj(const std::string &path) {
     std::vector<ObjVertexCoords> vertices;
     std::vector<ObjVertexCoords> normals;
     std::vector<ObjTexCoords> texCoords;
-    std::vector<float> faceVertices;
-    std::vector<float> faceTexCoords;
-    std::vector<float> faceNormals;
-    size_t faceCount = 0;
+    MeshBuilder mesh;
 
     while (std::getline(file, line)) {
         if (!strncmp(line.c_str(), "v ", 2)) {
@@ -306,31 +263,45 @@ Model *Model::loadObj(const std::string &path) {
 
             if (nv == -1) {
                 std::cerr << "Failed to parse face:" << std::endl << line << std::endl;
+                delete mat;
                 return nullptr;
             }
 
             switch (nv) {
                 case 4:
                     // Quad
-                    if (!objFaceQuad(vertices, texCoords, normals, faceVertices, faceTexCoords, faceNormals, i)) {
+                    if (!objFaceQuad(vertices, texCoords, normals, mesh, i)) {
                         std::cerr << "Invalid quad:" << std::endl << line << std::endl;
+                        delete mat;
                         return nullptr;
                     }
-                    faceCount += 2;
                     break;
                 case 3:
-                    if (!objFaceTriangle(vertices, texCoords, normals, faceVertices, faceTexCoords, faceNormals, i)) {
+                    if (!objFaceTriangle(vertices, texCoords, normals, mesh, i)) {
                         std::cerr << "Invalid triangle:" << std::endl << line << std::endl;
+                        delete mat;
                         return nullptr;
                     }
-                    faceCount += 1;
                     break;
                 default:
                     std::cerr << "Unsupported face type: " << nv << " vertices" << std::endl;
+                    delete mat;
                     return nullptr;
+            }
+        } else if (!strncmp(line.c_str(), "mtllib ", 7)) {
+            char path[1024];
+            sscanf(line.c_str(), "mtllib %s", path);
+
+            mat = Material::loadMtl(path);
+
+            if (!mat) {
+                std::cerr << "Model: failed to load material" << path << std::endl;
+                return nullptr;
             }
         }
     }
 
-    return new Model(&faceVertices[0], &faceTexCoords[0], &faceNormals[0], nullptr, faceCount * 3);
+    mesh.uploadMesh();
+
+    return new Model(mesh.vertexCount, mesh.vertexBufferID, mesh.texCoordBufferID, mesh.normalBufferID, mat);
 }

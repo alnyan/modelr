@@ -13,8 +13,9 @@ public:
 
 private:
     Texture *m_map_Kd = nullptr;
+    Texture *m_map_Bump = nullptr;
     glm::vec3 m_Ka = { 0.2f, 0.2f, 0.2f },
               m_Kd = { 0.8f, 0.8f, 0.8f },
               m_Ks = { 1.0f, 1.0f, 1.0f };
-    float m_Ns;
+    float m_Ns = 10;
 };

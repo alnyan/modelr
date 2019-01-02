@@ -2,9 +2,9 @@
 #include <math.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include "model.h"
-#include "shader.h"
-#include "texture.h"
+#include "render/model.h"
+#include "render/shader.h"
+#include "render/texture.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -53,6 +53,8 @@ void setup_gl(void) {
     s_shader = Shader::loadShader("shader.vert", "shader.frag");
 
     s_projectionMatrix = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
+
+    glClearColor(0, 0.25, 0.25, 1);
 }
 
 void render(void) {
@@ -65,7 +67,7 @@ void render(void) {
 
     auto t = glfwGetTime();
 
-    glm::vec3 eyePos(10 * cos(t), 5, 10 * sin(t));
+    glm::vec3 eyePos(5 * cos(t), 5, 5 * sin(t));
     glm::vec3 eyeDst(0, 0, 0);
 
     s_viewMatrix = glm::lookAt(

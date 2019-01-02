@@ -12,11 +12,11 @@ pkg_check_modules(PNG REQUIRED libpng)
 set(INCLUDE_DIRS ${GLFW_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS} ${PNG_INCLUDE_DIRS})
 set(LIBRARIES ${GLFW_LIBRARIES} ${GLEW_LIBRARIES} ${PNG_LIBRARIES})
 set(SOURCES src/main.cpp
-            src/model.cpp
-            src/shader.cpp
-            src/texture.cpp
+            src/render/model.cpp
+            src/render/shader.cpp
+            src/render/texture.cpp
             src/lodepng.cpp
-            src/material.cpp)
+            src/render/material.cpp)
 
 include_directories(${INCLUDE_DIRS})
 

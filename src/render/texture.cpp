@@ -2,7 +2,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <png.h>
-#include "lodepng.h"
+#include "../lodepng.h"
 
 Texture::Texture(GLuint texID): m_textureID{texID} {}
 
