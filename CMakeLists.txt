@@ -16,7 +16,8 @@ set(SOURCES src/main.cpp
             src/render/shader.cpp
             src/render/texture.cpp
             src/lodepng.cpp
-            src/render/material.cpp)
+            src/render/material.cpp
+            src/gameobject.cpp)
 
 include_directories(${INCLUDE_DIRS})
 

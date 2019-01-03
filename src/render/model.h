@@ -53,12 +53,6 @@ public:
 private:
     std::vector<VertexFormat> m_vertexData;
     std::vector<TangentFormat> m_tangentData;
-    //std::vector<GLfloat> m_vertexData, m_tangentData;
-    //std::vector<GLfloat> m_vertexData,
-                         //m_texCoordData,
-                         //m_normalData,
-                         //m_tangentData,
-                         //m_bitangentData;
 
     bool m_genTangents;
     GLfloat m_nx, m_ny, m_nz, m_u, m_v;
@@ -72,6 +66,7 @@ public:
     void render(Shader *shader);
     void bind(Shader *shader);
     void unbind(Shader *shader);
+    static void unbindAll();
 
     static Model *loadObj(const std::string &path);
 

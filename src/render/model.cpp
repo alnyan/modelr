@@ -16,6 +16,8 @@ using ObjTexCoords = glm::vec<2, float>;
 static_assert(sizeof(MeshBuilder::VertexFormat) == 8 * sizeof(GLfloat));
 static_assert(sizeof(MeshBuilder::TangentFormat) == 6 * sizeof(GLfloat));
 
+static Model *s_boundModel = nullptr;
+
 //
 
 MeshBuilder::MeshBuilder(bool hasTangents): m_genTangents{hasTangents} {
@@ -125,6 +127,11 @@ Model::~Model() {
 }
 
 void Model::bind(Shader *shader) {
+    if (s_boundModel == this) {
+        return;
+    }
+    s_boundModel = this;
+
     glBindVertexArray(m_buffer.arrayID);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
@@ -140,7 +147,19 @@ void Model::bind(Shader *shader) {
     }
 }
 
+void Model::unbindAll() {
+    s_boundModel = nullptr;
+    glDisableVertexAttribArray(4);
+    glDisableVertexAttribArray(3);
+    glDisableVertexAttribArray(2);
+    glDisableVertexAttribArray(1);
+    glDisableVertexAttribArray(0);
+    glBindVertexArray(0);
+}
+
 void Model::unbind(Shader *shader) {
+    s_boundModel = nullptr;
+
     if (m_buffer.flags & 1) {
         glDisableVertexAttribArray(4);
         glDisableVertexAttribArray(3);

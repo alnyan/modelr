@@ -7,15 +7,19 @@
 #include "render/texture.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "gameobject.h"
 
 //
 
 static GLFWwindow *s_window;
-static GLuint s_vertexArrayID;
 static Model *s_model;
-static GLuint s_vertexBufferID, s_texCoordBufferID;
 static Shader *s_shader;
 static Texture *s_texture;
+
+#define WWW 100
+#define HHH 100
+
+static GameObject *s_objects[WWW * HHH];
 
 static glm::vec3 s_cameraPos, s_cameraRot;
 static glm::mat4 s_viewMatrix, s_projectionMatrix;
@@ -23,28 +27,6 @@ static glm::mat4 s_viewMatrix, s_projectionMatrix;
 //
 
 void setup_gl(void) {
-    glGenVertexArrays(1, &s_vertexArrayID);
-    glBindVertexArray(s_vertexArrayID);
-
-    const float plane[] = {
-        -1, -1, -2,
-        1, -1, -2,
-        1, 1, -2
-    };
-    const float texPlane[] = {
-        0, 0,
-        1, 0,
-        1, 1
-    };
-
-    glGenBuffers(1, &s_vertexBufferID);
-    glBindBuffer(GL_ARRAY_BUFFER, s_vertexBufferID);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(plane), plane, GL_STATIC_DRAW);
-
-    glGenBuffers(1, &s_texCoordBufferID);
-    glBindBuffer(GL_ARRAY_BUFFER, s_texCoordBufferID);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(texPlane), texPlane, GL_STATIC_DRAW);
-
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
@@ -55,6 +37,14 @@ void setup_gl(void) {
     s_projectionMatrix = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
 
     glClearColor(0, 0.25, 0.25, 1);
+
+    for (int i = 0; i < WWW; ++i) {
+        for (int j = 0; j < HHH; ++j) {
+            s_objects[i * HHH + j] = new GameObject(glm::vec3(i * 2, 0, j * 2));
+            s_objects[i * HHH + j]->addModelMesh({ glm::vec3(0), s_model });
+            s_objects[i * HHH + j]->setShader(s_shader);
+        }
+    }
 }
 
 void render(void) {
@@ -88,28 +78,27 @@ void render(void) {
     glUniform3f(l, eyeDst.x, eyeDst.y, eyeDst.z);
 
     auto t0 = glfwGetTime();
-    s_model->bind(s_shader);
-    auto t1 = glfwGetTime();
-    for (int i = 0; i < 10; ++i) {
-        for (int j = 0; j < 10; ++j) {
-            auto modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(i * 2.0f, 0, j * 2.0f));
-            l = s_shader->getUniformLocation("mModelMatrix");
-            glUniformMatrix4fv(l, 1, GL_FALSE, &modelMatrix[0][0]);
-            s_model->render(s_shader);
-        }
-    }
-    auto t2 = glfwGetTime();
-    s_model->unbind(s_shader);
 
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(2);
-    glBindBuffer(GL_ARRAY_BUFFER, s_vertexBufferID);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glBindBuffer(GL_ARRAY_BUFFER, s_texCoordBufferID);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(2);
+    for (const auto &obj: s_objects) {
+        obj->render();
+    }
+    //s_model->bind(s_shader);
+    //auto t1 = glfwGetTime();
+    //for (int i = 0; i < 10; ++i) {
+        //for (int j = 0; j < 10; ++j) {
+            //auto modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(i * 2.0f, 0, j * 2.0f));
+            //l = s_shader->getUniformLocation("mModelMatrix");
+            //glUniformMatrix4fv(l, 1, GL_FALSE, &modelMatrix[0][0]);
+            //s_model->render(s_shader);
+        //}
+    //}
+    //auto t2 = glfwGetTime();
+    //s_model->unbind(s_shader);
+    Model::unbindAll();
+    auto t3 = glfwGetTime();
+
+
+    //std::cout << (t3 - t0) * 1000 << std::endl;
 }
 
 //
