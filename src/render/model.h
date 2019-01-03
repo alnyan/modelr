@@ -7,10 +7,25 @@
 #include "shader.h"
 #include <vector>
 
+// Vertex attribute interleaved layout:
+//
+//      [N]     Attrib
+//       0      x0
+//       1      y0
+//       2      z0
+//       3      u0
+//       4      v0
+//       5      nx0
+//       6      ny0
+//       7      nz0
+//
+
 struct VertexBuffer {
     int flags = 0;
     GLuint vertexCount;
-    GLuint bufferIDs[5];
+    GLuint vertexBufferID;
+    GLuint tangentBufferID;
+    GLuint arrayID;
 };
 
 class MeshBuilder {
@@ -25,12 +40,25 @@ public:
     void vertex(GLfloat x, GLfloat y, GLfloat z);
 
     VertexBuffer buffer;
+
+    struct VertexFormat {
+        glm::vec3 v;
+        glm::vec2 n;
+        glm::vec3 t;
+    };
+
+    struct TangentFormat {
+        glm::vec3 tangent, bitangent;
+    };
 private:
-    std::vector<GLfloat> m_vertexData,
-                         m_texCoordData,
-                         m_normalData,
-                         m_tangentData,
-                         m_bitangentData;
+    std::vector<VertexFormat> m_vertexData;
+    std::vector<TangentFormat> m_tangentData;
+    //std::vector<GLfloat> m_vertexData, m_tangentData;
+    //std::vector<GLfloat> m_vertexData,
+                         //m_texCoordData,
+                         //m_normalData,
+                         //m_tangentData,
+                         //m_bitangentData;
 
     bool m_genTangents;
     GLfloat m_nx, m_ny, m_nz, m_u, m_v;

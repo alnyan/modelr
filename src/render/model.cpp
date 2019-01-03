@@ -1,5 +1,6 @@
 #include "model.h"
 #include <glm/glm.hpp>
+#include <assert.h>
 #include <fstream>
 #include <iostream>
 #include <stdio.h>
@@ -12,10 +13,17 @@ using ObjVertexCoords = glm::vec<3, float>;
 using ObjVertexIndex = std::list<glm::vec<3, int>>;
 using ObjTexCoords = glm::vec<2, float>;
 
+static_assert(sizeof(MeshBuilder::VertexFormat) == 8 * sizeof(GLfloat));
+static_assert(sizeof(MeshBuilder::TangentFormat) == 6 * sizeof(GLfloat));
+
 //
 
 MeshBuilder::MeshBuilder(bool hasTangents): m_genTangents{hasTangents} {
-    glCreateBuffers(hasTangents ? 5 : 3, buffer.bufferIDs);
+    glCreateBuffers(1, &buffer.vertexBufferID);
+    if (hasTangents) {
+        glCreateBuffers(1, &buffer.tangentBufferID);
+    }
+    glGenVertexArrays(1, &buffer.arrayID);
     m_u = m_v = 0;
     m_nx = m_ny = m_nz = 0;
     buffer.vertexCount = 0;
@@ -23,19 +31,16 @@ MeshBuilder::MeshBuilder(bool hasTangents): m_genTangents{hasTangents} {
 
 void MeshBuilder::genTangents() {
     for (int i = 0; i < buffer.vertexCount; i += 3) {
-        glm::vec3 v0(m_vertexData[i * 3 + 0], m_vertexData[i * 3 + 1], m_vertexData[i * 3 + 2]);
-        glm::vec3 v1(m_vertexData[i * 3 + 3], m_vertexData[i * 3 + 4], m_vertexData[i * 3 + 5]);
-        glm::vec3 v2(m_vertexData[i * 3 + 6], m_vertexData[i * 3 + 7], m_vertexData[i * 3 + 8]);
-        glm::vec2 t0(m_texCoordData[i * 2 + 0], m_texCoordData[i * 2 + 1]);
-        glm::vec2 t1(m_texCoordData[i * 2 + 2], m_texCoordData[i * 2 + 3]);
-        glm::vec2 t2(m_texCoordData[i * 2 + 4], m_texCoordData[i * 2 + 5]);
-        glm::vec3 n0(m_normalData[i * 3 + 0], m_normalData[i * 3 + 1], m_normalData[i * 3 + 2]);
+        VertexFormat a, b, c;
+        a = m_vertexData[i];
+        b = m_vertexData[i + 1];
+        c = m_vertexData[i + 2];
 
-        glm::vec3 dv0 = v1 - v0;
-        glm::vec3 dv1 = v2 - v0;
+        glm::vec3 dv0 = b.v - a.v;
+        glm::vec3 dv1 = c.v - a.v;
 
-        glm::vec2 dt0 = t1 - t0;
-        glm::vec2 dt1 = t2 - t0;
+        glm::vec2 dt0 = b.t - a.t;
+        glm::vec2 dt1 = c.t - a.t;
 
         float r = 1.0f / (dt0.x * dt1.y - dt0.y * dt1.x);
 
@@ -56,28 +61,9 @@ void MeshBuilder::genTangents() {
 
 #undef tround
 
-        //std::cout << "Face: n = (" << n0.x << "; " << n0.y << "; " << n0.z << "),"
-            //" t = (" << tangent.x << "; " << tangent.y << "; " << tangent.z << "),"
-            //" b = (" << bitangent.x << "; " << bitangent.y << "; " << bitangent.z << ")" << std::endl;
-
-        m_tangentData.push_back(tangent.x);
-        m_tangentData.push_back(tangent.y);
-        m_tangentData.push_back(tangent.z);
-        m_tangentData.push_back(tangent.x);
-        m_tangentData.push_back(tangent.y);
-        m_tangentData.push_back(tangent.z);
-        m_tangentData.push_back(tangent.x);
-        m_tangentData.push_back(tangent.y);
-        m_tangentData.push_back(tangent.z);
-        m_bitangentData.push_back(bitangent.x);
-        m_bitangentData.push_back(bitangent.y);
-        m_bitangentData.push_back(bitangent.z);
-        m_bitangentData.push_back(bitangent.x);
-        m_bitangentData.push_back(bitangent.y);
-        m_bitangentData.push_back(bitangent.z);
-        m_bitangentData.push_back(bitangent.x);
-        m_bitangentData.push_back(bitangent.y);
-        m_bitangentData.push_back(bitangent.z);
+        for (int i = 0; i < 3; ++i) {
+            m_tangentData.push_back({ tangent, bitangent });
+        }
     }
 }
 
@@ -87,21 +73,24 @@ void MeshBuilder::uploadMesh() {
             genTangents();
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferIDs[0]);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 3 * buffer.vertexCount, &m_vertexData[0], GL_STATIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferIDs[1]);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 2 * buffer.vertexCount, &m_texCoordData[0], GL_STATIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferIDs[2]);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 3 * buffer.vertexCount, &m_normalData[0], GL_STATIC_DRAW);
+        assert(m_vertexData.size() == buffer.vertexCount);
+
+        glBindVertexArray(buffer.arrayID);
+        glBindBuffer(GL_ARRAY_BUFFER, buffer.vertexBufferID);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(MeshBuilder::VertexFormat) * buffer.vertexCount, &m_vertexData[0], GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshBuilder::VertexFormat), (GLvoid *) 0);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MeshBuilder::VertexFormat), (GLvoid *) (sizeof(glm::vec3)));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(MeshBuilder::VertexFormat), (GLvoid *) (sizeof(glm::vec3) + sizeof(glm::vec2)));
 
         if (m_genTangents) {
-            // Upload tangent and bi-tangent data
-            glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferIDs[3]);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 3 * buffer.vertexCount, &m_tangentData[0], GL_STATIC_DRAW);
-            glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferIDs[4]);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 3 * buffer.vertexCount, &m_bitangentData[0], GL_STATIC_DRAW);
+            assert(m_tangentData.size() == buffer.vertexCount);
+
+            glBindBuffer(GL_ARRAY_BUFFER, buffer.tangentBufferID);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(TangentFormat) * buffer.vertexCount, &m_tangentData[0], GL_STATIC_DRAW);
             buffer.flags |= 1;
         }
+
+        glBindVertexArray(0);
     }
 }
 
@@ -117,14 +106,11 @@ void MeshBuilder::normal(GLfloat nx, GLfloat ny, GLfloat nz) {
 }
 
 void MeshBuilder::vertex(GLfloat x, GLfloat y, GLfloat z) {
-    m_texCoordData.push_back(m_u);
-    m_texCoordData.push_back(m_v);
-    m_normalData.push_back(m_nx);
-    m_normalData.push_back(m_ny);
-    m_normalData.push_back(m_nz);
-    m_vertexData.push_back(x);
-    m_vertexData.push_back(y);
-    m_vertexData.push_back(z);
+    m_vertexData.push_back({
+            {x, y, z},
+            {m_u, m_v},
+            {m_nx, m_ny, m_nz}
+    });
     m_u = m_v = 0;
     m_nx = m_ny = m_nz = 0;
     ++buffer.vertexCount;
@@ -139,25 +125,14 @@ Model::~Model() {
 }
 
 void Model::bind(Shader *shader) {
+    glBindVertexArray(m_buffer.arrayID);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_buffer.bufferIDs[0]);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glBindBuffer(GL_ARRAY_BUFFER, m_buffer.bufferIDs[1]);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glBindBuffer(GL_ARRAY_BUFFER, m_buffer.bufferIDs[2]);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, 0, 0);
-
     if (m_buffer.flags & 1) {
         glEnableVertexAttribArray(3);
         glEnableVertexAttribArray(4);
-
-        glBindBuffer(GL_ARRAY_BUFFER, m_buffer.bufferIDs[3]);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, 0);
-        glBindBuffer(GL_ARRAY_BUFFER, m_buffer.bufferIDs[4]);
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 0, 0);
     }
 
     if (m_material) {
@@ -174,6 +149,8 @@ void Model::unbind(Shader *shader) {
     glDisableVertexAttribArray(2);
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(0);
+
+    glBindVertexArray(0);
 }
 
 void Model::render(Shader *shader) {

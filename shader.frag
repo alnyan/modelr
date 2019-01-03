@@ -60,12 +60,11 @@ void main() {
         normalize(mSourceBitangent),
         normalize(mapNormal)
     ));
-    //mapNormal = matTBN * mapNormal;
 
     // Light params
-    vec3 lightVec = matTBN * normalize(lightPos - mSourceVertex);
+    vec3 lightVec = normalize(lightPos - mSourceVertex);
     float lightDist = length(lightPos - mSourceVertex);
-    vec3 eyeVec = matTBN * normalize(mCameraPosition - mCameraDestination);
+    vec3 eyeVec = normalize(mCameraPosition - mCameraDestination);
     float eyeDist = length(mCameraPosition - mSourceVertex);
 
     // Diffuse component
@@ -75,6 +74,6 @@ void main() {
 
     color =
         res_Kd +
-        //res_Ks;
-        0;
+        res_Ks;
+        //0;
 }
