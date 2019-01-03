@@ -19,6 +19,7 @@ static Shader *s_shader;
 static Scene *s_scene;
 
 static constexpr float s_moveSpeed = 2;
+static double s_walkStart = 0;
 static int m_width, m_height;
 static bool s_wDown = false;
 static double s_lastTime = 0;
@@ -37,7 +38,7 @@ void setup_gl(void) {
     s_model = Model::loadObj("model.obj");
     s_shader = Shader::loadShader("shader.vert", "shader.frag");
 
-    s_projectionMatrix = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
+    s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 100.0f);
 
     glClearColor(0, 0.25, 0.25, 1);
 
@@ -64,11 +65,16 @@ void render(void) {
     s_lastTime = t;
 
     // Move camera
+    double wt = t - s_walkStart;
+    double bobf = 0.05 * sin(wt * 10) * s_wDown;
     double ry = s_scene->camera().dst.y;
     float dx = s_moveSpeed * sin(ry) * dt * s_wDown;
     float dz = -s_moveSpeed * cos(ry) * dt * s_wDown;
+    glm::vec3 delta(dx, 0, dz);
+    glm::vec3 bob(-bobf * sin(ry + M_PI / 2), bobf, bobf * cos(ry + M_PI / 2));
 
-    s_scene->camera().translate(glm::vec3(dx, 0, dz));
+    s_scene->camera().bob(bob);
+    s_scene->camera().translate(delta);
 
     s_scene->render();
     Model::unbindAll();
@@ -95,6 +101,9 @@ void cursorPosCallback(GLFWwindow *win, double x, double y) {
 void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
     if (key == GLFW_KEY_W) {
         s_wDown = !!action;
+        if (action == 1) {
+            s_walkStart = glfwGetTime();
+        }
     }
 }
 

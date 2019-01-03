@@ -13,13 +13,14 @@ public:
     void translate(glm::vec3 p);
     void lookAt(glm::vec3 f, glm::vec3 p);
 
+    void bob(glm::vec3 f);
     void setPos(glm::vec3 f);
     void setRotation(glm::vec3 r);
     void rotate(glm::vec3 r);
 
     void setMode(bool mode);
 
-    glm::vec3 src, dst;
+    glm::vec3 src, dst, b;
 private:
     void updateMatrix();
 

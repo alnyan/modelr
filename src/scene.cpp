@@ -13,6 +13,10 @@ void Camera::translate(glm::vec3 dt) {
     updateMatrix();
 }
 
+void Camera::bob(glm::vec3 bx) {
+    b = bx;
+}
+
 void Camera::lookAt(glm::vec3 f, glm::vec3 t) {
     src = f;
     dst = t;
@@ -44,11 +48,11 @@ void Camera::updateMatrix() {
         glm::mat4 rotate = matPitch * matYaw;
 
         glm::mat4 translate = glm::mat4(1.0f);
-        translate = glm::translate(translate, -src);
+        translate = glm::translate(translate, -src + b);
 
         m_matrix = rotate * translate;
     } else {
-        m_matrix = glm::lookAt(src, dst, glm::vec3(0, 1, 0));
+        m_matrix = glm::lookAt(src + b, dst + b, glm::vec3(0, 1, 0));
     }
 }
 
