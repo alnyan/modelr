@@ -17,6 +17,7 @@ static GLFWwindow *s_window;
 static Model *s_model;
 static Shader *s_shader;
 static Scene *s_scene;
+static GameObject *s_player;
 
 static constexpr float s_moveSpeed = 2;
 static double s_walkStart = 0;
@@ -45,13 +46,18 @@ void setup_gl(void) {
     s_scene = new Scene(s_shader, s_projectionMatrix);
     for (int i = 0; i < WWW; ++i) {
         for (int j = 0; j < HHH; ++j) {
-            GameObject *o = new GameObject(glm::vec3(i * 2, 0, j * 2));
-            o->addModelMesh({ glm::vec3(0), s_model });
+            MeshObject *o = new MeshObject({ glm::vec3(0), s_model });
+            o->setWorldPosition({ i * 2.0f, 0.0f, j * 2.0f });
             s_scene->add(o);
         }
     }
 
-    s_scene->camera().setPos({ 5.0f, 2.0f, 5.0f });
+    s_player = new GameObject();
+    s_player->addChild(&s_scene->camera());
+    s_player->setWorldPosition({ 10, 2, 10 });
+
+    s_scene->add(s_player);
+
     s_scene->camera().setRotation({ 0, 0, 0 });
 
     s_lastTime = glfwGetTime();
@@ -74,7 +80,7 @@ void render(void) {
     glm::vec3 bob(-bobf * sin(ry + M_PI / 2), bobf, bobf * cos(ry + M_PI / 2));
 
     s_scene->camera().bob(bob);
-    s_scene->camera().translate(delta);
+    s_player->translate(delta);
 
     s_scene->render();
     Model::unbindAll();

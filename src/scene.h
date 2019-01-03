@@ -6,11 +6,10 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
-class Camera {
+class Camera: public GameObject {
 public:
     const glm::mat4 &getMatrix() const;
 
-    void translate(glm::vec3 p);
     void lookAt(glm::vec3 f, glm::vec3 p);
 
     void bob(glm::vec3 f);
@@ -18,9 +17,11 @@ public:
     void setRotation(glm::vec3 r);
     void rotate(glm::vec3 r);
 
+    void onUpdatePosition() override;
+
     void setMode(bool mode);
 
-    glm::vec3 src, dst, b;
+    glm::vec3 dst, b;
 private:
     void updateMatrix();
 
@@ -38,7 +39,11 @@ public:
 
 private:
     Shader *m_shader;
-    std::list<GameObject *> m_objects;
+
+    std::list<GameObject *> m_allObjects;
+    // For faster drawing
+    std::list<MeshObject *> m_meshObjects;
+
     Camera m_camera;
     glm::mat4 m_projectionMatrix;
 };

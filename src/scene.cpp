@@ -5,11 +5,7 @@ const glm::mat4 &Camera::getMatrix() const {
     return m_matrix;
 }
 
-void Camera::translate(glm::vec3 dt) {
-    src += dt;
-    if (!m_mode) {
-        dst += dt;
-    }
+void Camera::onUpdatePosition() {
     updateMatrix();
 }
 
@@ -18,18 +14,12 @@ void Camera::bob(glm::vec3 bx) {
 }
 
 void Camera::lookAt(glm::vec3 f, glm::vec3 t) {
-    src = f;
     dst = t;
-    updateMatrix();
+    setWorldPosition(f);
 }
 
 void Camera::rotate(glm::vec3 r) {
     dst += r;
-    updateMatrix();
-}
-
-void Camera::setPos(glm::vec3 p) {
-    src = p;
     updateMatrix();
 }
 
@@ -48,11 +38,11 @@ void Camera::updateMatrix() {
         glm::mat4 rotate = matPitch * matYaw;
 
         glm::mat4 translate = glm::mat4(1.0f);
-        translate = glm::translate(translate, -src + b);
+        translate = glm::translate(translate, -getWorldPosition() + b);
 
         m_matrix = rotate * translate;
     } else {
-        m_matrix = glm::lookAt(src + b, dst + b, glm::vec3(0, 1, 0));
+        m_matrix = glm::lookAt(getWorldPosition() + b, dst + b, glm::vec3(0, 1, 0));
     }
 }
 
@@ -63,23 +53,27 @@ void Scene::render() {
     m_shader->apply();
 
     const auto &cameraMatrix = m_camera.getMatrix();
+    auto cameraPos = m_camera.getWorldPosition();
     auto l = m_shader->getUniformLocation("mProjectionMatrix");
     glUniformMatrix4fv(l, 1, GL_FALSE, &m_projectionMatrix[0][0]);
     l = m_shader->getUniformLocation("mCameraPosition");
-    glUniform3f(l, m_camera.src.x, m_camera.src.y, m_camera.src.z);
+    glUniform3f(l, cameraPos.x, cameraPos.y, cameraPos.z);
     l = m_shader->getUniformLocation("mCameraMatrix");
     glUniformMatrix4fv(l, 1, GL_FALSE, &cameraMatrix[0][0]);
     l = m_shader->getUniformLocation("mCameraDestination");
     glUniform3f(l, m_camera.dst.x, m_camera.dst.y, m_camera.dst.z);
 
-    for (const auto &o: m_objects) {
+    for (const auto &o: m_meshObjects) {
         o->render();
     }
 }
 
 void Scene::add(GameObject *o) {
-    o->setShader(m_shader);
-    m_objects.push_back(o);
+    m_allObjects.push_back(o);
+    if (MeshObject *m = dynamic_cast<MeshObject *>(o)) {
+        m->setShader(m_shader);
+        m_meshObjects.push_back(m);
+    }
 }
 
 Camera &Scene::camera() {

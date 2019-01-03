@@ -11,16 +11,34 @@ struct ModelMesh {
 
 class GameObject {
 public:
-    GameObject(glm::vec3 pos);
+    void addChild(GameObject *child);
 
-    void addModelMesh(const ModelMesh &m);
-    void setShader(Shader *s);
+    void setLocalPosition(glm::vec3 pos);
+    void setWorldPosition(glm::vec3 pos);
+    void translate(glm::vec3 dt);
+
+    virtual void onUpdatePosition();
+
+    const glm::vec3 &getWorldPosition() const;
+
+    GameObject *m_parent = nullptr;
+private:
+    std::list<GameObject *> m_children;
+    glm::vec3 m_localPosition, m_worldPosition;
+};
+
+class MeshObject: public GameObject {
+public:
+    MeshObject(ModelMesh m);
+
+    void setShader(Shader *sh);
     void render();
-    glm::vec3 getPosition() const;
+
+    void onUpdatePosition() override;
 
 private:
-    std::list<ModelMesh> m_models;
-    Shader *m_shader = nullptr;
+    Shader *m_shader;
+    ModelMesh m_mesh;
+
     glm::mat4 m_modelMatrix;
-    glm::vec3 m_position;
 };
