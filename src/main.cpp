@@ -8,21 +8,25 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
+#include "scene.h"
+#include <glm/gtx/euler_angles.hpp>
 
 //
 
 static GLFWwindow *s_window;
 static Model *s_model;
 static Shader *s_shader;
-static Texture *s_texture;
+static Scene *s_scene;
 
-#define WWW 100
-#define HHH 100
+static constexpr float s_moveSpeed = 2;
+static int m_width, m_height;
+static bool s_wDown = false;
+static double s_lastTime = 0;
 
-static GameObject *s_objects[WWW * HHH];
+#define WWW 10
+#define HHH 10
 
-static glm::vec3 s_cameraPos, s_cameraRot;
-static glm::mat4 s_viewMatrix, s_projectionMatrix;
+static glm::mat4 s_projectionMatrix;
 
 //
 
@@ -31,81 +35,67 @@ void setup_gl(void) {
     glDepthFunc(GL_LESS);
 
     s_model = Model::loadObj("model.obj");
-    s_texture = Texture::loadPng("texture.png");
     s_shader = Shader::loadShader("shader.vert", "shader.frag");
 
     s_projectionMatrix = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
 
     glClearColor(0, 0.25, 0.25, 1);
 
+    s_scene = new Scene(s_shader, s_projectionMatrix);
     for (int i = 0; i < WWW; ++i) {
         for (int j = 0; j < HHH; ++j) {
-            s_objects[i * HHH + j] = new GameObject(glm::vec3(i * 2, 0, j * 2));
-            s_objects[i * HHH + j]->addModelMesh({ glm::vec3(0), s_model });
-            s_objects[i * HHH + j]->setShader(s_shader);
+            GameObject *o = new GameObject(glm::vec3(i * 2, 0, j * 2));
+            o->addModelMesh({ glm::vec3(0), s_model });
+            s_scene->add(o);
         }
     }
+
+    s_scene->camera().setPos({ 5.0f, 2.0f, 5.0f });
+    s_scene->camera().setRotation({ 0, 0, 0 });
+
+    s_lastTime = glfwGetTime();
 }
 
 void render(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (s_texture) {
-        s_texture->bind();
-    }
-    s_shader->apply();
-
     auto t = glfwGetTime();
+    auto dt = t - s_lastTime;
+    s_lastTime = t;
 
-    glm::vec3 eyeDst(3, 0, 3);
-    glm::vec3 eyePos(5 * cos(t), 5, 5 * sin(t));
-    eyePos += eyeDst;
+    // Move camera
+    double ry = s_scene->camera().dst.y;
+    float dx = s_moveSpeed * sin(ry) * dt * s_wDown;
+    float dz = -s_moveSpeed * cos(ry) * dt * s_wDown;
 
-    s_viewMatrix = glm::lookAt(
-        eyePos,
-        eyeDst,
-        glm::vec3(0, 1, 0)
-    );
+    s_scene->camera().translate(glm::vec3(dx, 0, dz));
 
-
-    auto l = s_shader->getUniformLocation("mProjectionMatrix");
-    glUniformMatrix4fv(l, 1, GL_FALSE, &s_projectionMatrix[0][0]);
-    l = s_shader->getUniformLocation("mCameraPosition");
-    glUniform3f(l, eyePos.x, eyePos.y, eyePos.z);
-    l = s_shader->getUniformLocation("mCameraMatrix");
-    glUniformMatrix4fv(l, 1, GL_FALSE, &s_viewMatrix[0][0]);
-    l = s_shader->getUniformLocation("mCameraDestination");
-    glUniform3f(l, eyeDst.x, eyeDst.y, eyeDst.z);
-
-    auto t0 = glfwGetTime();
-
-    for (const auto &obj: s_objects) {
-        obj->render();
-    }
-    //s_model->bind(s_shader);
-    //auto t1 = glfwGetTime();
-    //for (int i = 0; i < 10; ++i) {
-        //for (int j = 0; j < 10; ++j) {
-            //auto modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(i * 2.0f, 0, j * 2.0f));
-            //l = s_shader->getUniformLocation("mModelMatrix");
-            //glUniformMatrix4fv(l, 1, GL_FALSE, &modelMatrix[0][0]);
-            //s_model->render(s_shader);
-        //}
-    //}
-    //auto t2 = glfwGetTime();
-    //s_model->unbind(s_shader);
+    s_scene->render();
     Model::unbindAll();
-    auto t3 = glfwGetTime();
-
-
-    //std::cout << (t3 - t0) * 1000 << std::endl;
 }
 
 //
 
 void windowSizeCallback(GLFWwindow *win, int width, int height) {
     glViewport(0, 0, width, height);
+    m_width = width;
+    m_height = height;
     s_projectionMatrix = glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f);
+}
+
+void cursorPosCallback(GLFWwindow *win, double x, double y) {
+    double cx = (x - m_width / 2) / m_width;
+    double cy = (y - m_height / 2) / m_height;
+
+    glfwSetCursorPos(win, m_width / 2, m_height / 2);
+
+    s_scene->camera().rotate(glm::vec3(cy * 1.5, cx * 1.5, 0));
+}
+
+void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
+    if (key == GLFW_KEY_W) {
+        s_wDown = !!action;
+    }
 }
 
 //
@@ -128,6 +118,8 @@ int main() {
     }
 
     glfwSetWindowSizeCallback(s_window, windowSizeCallback);
+    glfwSetCursorPosCallback(s_window, cursorPosCallback);
+    glfwSetKeyCallback(s_window, keyCallback);
 
     glfwMakeContextCurrent(s_window);
 
