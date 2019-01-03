@@ -8,6 +8,7 @@ in vec3 mSourceBitangent;
 
 uniform vec3 mCameraPosition;
 uniform vec3 mCameraDestination;
+uniform mat4 mModelMatrix;
 
 uniform vec3 m_Ka;
 uniform vec3 m_Kd;
@@ -20,7 +21,7 @@ uniform int m_Matopt;
 out vec3 color;
 
 const vec3 lightColor = vec3(1, 1, 1);
-const vec3 lightPos = vec3(3, 3, 3); // Assume this
+const vec3 lightPos = vec3(5, 5, 5); // Assume this
 const float ambientIntensity = 0.1f;
 const float diffuseIntensity = 10;
 
@@ -52,29 +53,28 @@ void main() {
     }
 
     // Get tangent-basis matrix
-    //vec3 mapNormal = normalize((2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(1, 1, 1));
-    //mat3 matTBN = transpose(mat3(
-        //normalize(mSourceTangent),
-        //normalize(mSourceBitangent),
-        //normalize(mapNormal)
-    //));
+    float normalBumpiness = 10;
+    vec3 mapNormal = (normalBumpiness * 2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(normalBumpiness);
+    mat3 matTBN = transpose(mat3(
+        normalize(mSourceTangent),
+        normalize(mSourceBitangent),
+        normalize(mapNormal)
+    ));
+    //mapNormal = matTBN * mapNormal;
 
     // Light params
-    vec3 lightVec = normalize(lightPos - mSourceVertex);
+    vec3 lightVec = matTBN * normalize(lightPos - mSourceVertex);
     float lightDist = length(lightPos - mSourceVertex);
-    vec3 eyeVec = normalize(mCameraPosition - mCameraDestination);
+    vec3 eyeVec = matTBN * normalize(mCameraPosition - mCameraDestination);
     float eyeDist = length(mCameraPosition - mSourceVertex);
 
     // Diffuse component
-    vec3 res_Kd = funKd(diffuseColor, mSourceNormal, lightVec, lightDist);
-    //float cosTheta = clamp(dot(mSourceNormal, lightVec), 0, 1);
-    //float lightInt = cosTheta * diffuseIntensity / pow(lightDist, 2);
+    vec3 res_Kd = funKd(diffuseColor, mapNormal, lightVec, lightDist);
     // Specular component
-    vec3 res_Ks = funKs(lightColor, mSourceNormal, lightVec, eyeVec, lightDist, eyeDist);
+    vec3 res_Ks = funKs(lightColor, mapNormal, lightVec, eyeVec, lightDist, eyeDist);
 
     color =
-        //diffuseColor * lightInt +
         res_Kd +
-        //diffuseColor * m_Ka +
-        res_Ks;
+        //res_Ks;
+        0;
 }

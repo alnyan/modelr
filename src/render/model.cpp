@@ -29,6 +29,7 @@ void MeshBuilder::genTangents() {
         glm::vec2 t0(m_texCoordData[i * 2 + 0], m_texCoordData[i * 2 + 1]);
         glm::vec2 t1(m_texCoordData[i * 2 + 2], m_texCoordData[i * 2 + 3]);
         glm::vec2 t2(m_texCoordData[i * 2 + 4], m_texCoordData[i * 2 + 5]);
+        glm::vec3 n0(m_normalData[i * 3 + 0], m_normalData[i * 3 + 1], m_normalData[i * 3 + 2]);
 
         glm::vec3 dv0 = v1 - v0;
         glm::vec3 dv1 = v2 - v0;
@@ -38,8 +39,26 @@ void MeshBuilder::genTangents() {
 
         float r = 1.0f / (dt0.x * dt1.y - dt0.y * dt1.x);
 
-        glm::vec3 tangent = (dv0 * dt1.y - dv1 * dt0.y) * r;
-        glm::vec3 bitangent = (dv1 * dt0.x - dv0 * dt1.x) * r;
+        glm::vec3 tangent = -glm::normalize((dv0 * dt1.y - dv1 * dt0.y) * r);
+        glm::vec3 bitangent = -glm::normalize((dv1 * dt0.x - dv0 * dt1.x) * r);
+
+#define tround(x) \
+        if (glm::abs(x) < 1e-6) { \
+            x = 0; \
+        }
+
+        tround(tangent.x);
+        tround(tangent.y);
+        tround(tangent.z)
+        tround(bitangent.x)
+        tround(bitangent.y)
+        tround(bitangent.z)
+
+#undef tround
+
+        std::cout << "Face: n = (" << n0.x << "; " << n0.y << "; " << n0.z << "),"
+            " t = (" << tangent.x << "; " << tangent.y << "; " << tangent.z << "),"
+            " b = (" << bitangent.x << "; " << bitangent.y << "; " << bitangent.z << ")" << std::endl;
 
         m_tangentData.push_back(tangent.x);
         m_tangentData.push_back(tangent.y);
