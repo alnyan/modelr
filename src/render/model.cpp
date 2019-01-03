@@ -44,6 +44,18 @@ void MeshBuilder::genTangents() {
         m_tangentData.push_back(tangent.x);
         m_tangentData.push_back(tangent.y);
         m_tangentData.push_back(tangent.z);
+        m_tangentData.push_back(tangent.x);
+        m_tangentData.push_back(tangent.y);
+        m_tangentData.push_back(tangent.z);
+        m_tangentData.push_back(tangent.x);
+        m_tangentData.push_back(tangent.y);
+        m_tangentData.push_back(tangent.z);
+        m_bitangentData.push_back(bitangent.x);
+        m_bitangentData.push_back(bitangent.y);
+        m_bitangentData.push_back(bitangent.z);
+        m_bitangentData.push_back(bitangent.x);
+        m_bitangentData.push_back(bitangent.y);
+        m_bitangentData.push_back(bitangent.z);
         m_bitangentData.push_back(bitangent.x);
         m_bitangentData.push_back(bitangent.y);
         m_bitangentData.push_back(bitangent.z);

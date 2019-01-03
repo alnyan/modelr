@@ -74,6 +74,7 @@ Material *Material::loadMtl(const std::string &path) {
             }
 
             if (*l == '-') {
+                std::cout << l << std::endl;
                 sscanf(l, "-s %f %f %f %s", &a, &b, &c, path);
             } else {
                 strcpy(path, l);

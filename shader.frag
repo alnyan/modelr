@@ -20,7 +20,7 @@ uniform int m_Matopt;
 out vec3 color;
 
 const vec3 lightColor = vec3(1, 1, 1);
-const vec3 lightPos = vec3(3, 3, 3); // Assume this
+const vec3 lightPos = vec3(3, 0, 3); // Assume this
 const float ambientIntensity = 0.1f;
 const float diffuseIntensity = 0.25f;
 
@@ -38,12 +38,12 @@ void main() {
         normalize(mapNormal)
     ));
 
-    vec3 lightVec = normalize(lightPos - mSourceVertex);
+    vec3 lightVec = matTBN * normalize(lightPos - mSourceVertex);
     float lightDist = length(lightVec);
     float cosTheta = clamp(dot(mSourceNormal, lightVec), 0, 1);
     float lightInt = cosTheta * diffuseIntensity / pow(lightDist, 2);
 
-    vec3 eyeVec = normalize(mCameraPosition - mCameraDestination);
+    vec3 eyeVec = matTBN * normalize(mCameraPosition - mCameraDestination);
     vec3 lightReflect = reflect(-lightVec, mSourceNormal);
 
     float eyeDist = length(mCameraPosition - mSourceVertex);
@@ -53,5 +53,5 @@ void main() {
     color =
         diffuseColor * lightInt +
         diffuseColor * m_Ka +
-        lightColor * 10 * m_Ks * specularInt;
+        lightColor * m_Ks * specularInt;
 }
