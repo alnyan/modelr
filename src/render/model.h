@@ -42,6 +42,8 @@ public:
     ~Model();
 
     void render(Shader *shader);
+    void bind(Shader *shader);
+    void unbind(Shader *shader);
 
     static Model *loadObj(const std::string &path);
 

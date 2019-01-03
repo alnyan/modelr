@@ -67,8 +67,9 @@ void render(void) {
 
     auto t = glfwGetTime();
 
+    glm::vec3 eyeDst(3, 0, 3);
     glm::vec3 eyePos(5 * cos(t), 5, 5 * sin(t));
-    glm::vec3 eyeDst(0, 0, 0);
+    eyePos += eyeDst;
 
     s_viewMatrix = glm::lookAt(
         eyePos,
@@ -76,22 +77,29 @@ void render(void) {
         glm::vec3(0, 1, 0)
     );
 
+
     auto l = s_shader->getUniformLocation("mProjectionMatrix");
     glUniformMatrix4fv(l, 1, GL_FALSE, &s_projectionMatrix[0][0]);
-
-    l = s_shader->getUniformLocation("mCameraMatrix");
-    glUniformMatrix4fv(l, 1, GL_FALSE, &s_viewMatrix[0][0]);
-
     l = s_shader->getUniformLocation("mCameraPosition");
     glUniform3f(l, eyePos.x, eyePos.y, eyePos.z);
-
+    l = s_shader->getUniformLocation("mCameraMatrix");
+    glUniformMatrix4fv(l, 1, GL_FALSE, &s_viewMatrix[0][0]);
     l = s_shader->getUniformLocation("mCameraDestination");
     glUniform3f(l, eyeDst.x, eyeDst.y, eyeDst.z);
 
-    l = s_shader->getUniformLocation("texSampler");
-    glUniform1i(l, GL_TEXTURE_2D);
-
-    s_model->render(s_shader);
+    auto t0 = glfwGetTime();
+    s_model->bind(s_shader);
+    auto t1 = glfwGetTime();
+    for (int i = 0; i < 10; ++i) {
+        for (int j = 0; j < 10; ++j) {
+            auto modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(i * 2.0f, 0, j * 2.0f));
+            l = s_shader->getUniformLocation("mModelMatrix");
+            glUniformMatrix4fv(l, 1, GL_FALSE, &modelMatrix[0][0]);
+            s_model->render(s_shader);
+        }
+    }
+    auto t2 = glfwGetTime();
+    s_model->unbind(s_shader);
 
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(2);
@@ -119,6 +127,7 @@ int main() {
     }
 
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_SAMPLES, 4);                                    // 4x MSAA
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 

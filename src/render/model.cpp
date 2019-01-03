@@ -119,7 +119,7 @@ Model::~Model() {
     delete m_material;
 }
 
-void Model::render(Shader *shader) {
+void Model::bind(Shader *shader) {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
@@ -144,9 +144,9 @@ void Model::render(Shader *shader) {
     if (m_material) {
         m_material->apply(shader);
     }
+}
 
-    glDrawArrays(GL_TRIANGLES, 0, m_buffer.vertexCount);
-
+void Model::unbind(Shader *shader) {
     if (m_buffer.flags & 1) {
         glDisableVertexAttribArray(4);
         glDisableVertexAttribArray(3);
@@ -155,6 +155,10 @@ void Model::render(Shader *shader) {
     glDisableVertexAttribArray(2);
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(0);
+}
+
+void Model::render(Shader *shader) {
+    glDrawArrays(GL_TRIANGLES, 0, m_buffer.vertexCount);
 }
 
 static bool objParseIndex(const char *index, int &v, int &t, int &n) {
