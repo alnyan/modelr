@@ -56,9 +56,9 @@ void MeshBuilder::genTangents() {
 
 #undef tround
 
-        std::cout << "Face: n = (" << n0.x << "; " << n0.y << "; " << n0.z << "),"
-            " t = (" << tangent.x << "; " << tangent.y << "; " << tangent.z << "),"
-            " b = (" << bitangent.x << "; " << bitangent.y << "; " << bitangent.z << ")" << std::endl;
+        //std::cout << "Face: n = (" << n0.x << "; " << n0.y << "; " << n0.z << "),"
+            //" t = (" << tangent.x << "; " << tangent.y << "; " << tangent.z << "),"
+            //" b = (" << bitangent.x << "; " << bitangent.y << "; " << bitangent.z << ")" << std::endl;
 
         m_tangentData.push_back(tangent.x);
         m_tangentData.push_back(tangent.y);
