@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <string.h>
+#include "../res/assets.h"
 
 static Material *s_boundMaterial = nullptr;
 
@@ -30,7 +31,7 @@ void Material::apply(Shader *shader) {
 
 Material *Material::loadMtl(const std::string &path) {
     Material *res = new Material;
-    std::ifstream file(path);
+    std::ifstream file(Assets::getMaterialPath(path));
     std::string line;
 
     while (std::getline(file, line)) {

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <png.h>
 #include "../res/lodepng.h"
+#include "../res/assets.h"
 
 Texture::Texture(GLuint texID): m_textureID{texID} {}
 
@@ -17,7 +18,7 @@ void Texture::bind() {
 Texture *Texture::loadPng(const std::string &path) {
     std::vector<unsigned char> data;
     unsigned int width, height, error;
-    if ((error = lodepng::decode(data, width, height, path))) {
+    if ((error = lodepng::decode(data, width, height, Assets::getTexturePath(path)))) {
         std::cerr << "Error" << std::endl;
         return nullptr;
     }

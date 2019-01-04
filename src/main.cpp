@@ -33,7 +33,7 @@ static GameObject *s_player;
 
 //
 
-void init(void) {
+int init(void) {
     s_scene = new Scene(s_shader, s_projectionMatrix);
 
     s_player = new GameObject();
@@ -46,6 +46,10 @@ void init(void) {
 
     // Test model
     auto model = Model::loadObj("model.obj");
+    if (!model) {
+        std::cerr << "Failed to load models" << std::endl;
+        return -1;
+    }
 
     for (int i = 0; i < 10; ++i) {
         for (int j = 0; j < 10; ++j) {
@@ -54,18 +58,25 @@ void init(void) {
             s_scene->add(obj);
         }
     }
+
+    return 0;
 }
 
-void setup_gl(void) {
+int setup_gl(void) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
     s_shader = Shader::loadShader("shader.vert", "shader.frag");
+    if (!s_shader) {
+        std::cerr << "Failed to load shaders" << std::endl;
+    }
     s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
 
     glClearColor(0, 0.25, 0.25, 1);
 
     s_lastTime = glfwGetTime();
+
+    return 0;
 }
 
 void render(void) {
@@ -132,8 +143,8 @@ int main() {
 
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES, 4);                                    // 4x MSAA
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
 
     s_window = glfwCreateWindow(800, 600, "", NULL, NULL);
 
@@ -156,8 +167,10 @@ int main() {
 
     glfwSwapInterval(1);
 
-    setup_gl();
-    init();
+    if (setup_gl() != 0 || init() != 0) {
+        glfwTerminate();
+        return -1;
+    }
     auto t0 = glfwGetTime();
     int frames = 0;
 

@@ -3,6 +3,7 @@
 #include <fstream>
 #include <stdlib.h>
 #include "material.h"
+#include "../res/assets.h"
 
 Shader::Shader(GLuint programID): m_programID{programID} {
     glGenBuffers(1, &m_materialBufferID);
@@ -31,11 +32,12 @@ void Shader::applyMaterial(Material *mat) {
 
 static bool loadShaderSingle(const std::string &filename, GLenum shaderType, GLuint &shaderID) {
     std::string shaderCode;
-    std::ifstream file(filename);
+    std::ifstream file(Assets::getShaderPath(filename));
     GLint errorLength;
     GLint status;
 
     if (!file) {
+        std::cerr << "File does not exist: " << Assets::getShaderPath(filename) << std::endl;
         return false;
     }
 

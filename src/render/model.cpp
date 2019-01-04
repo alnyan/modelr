@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <list>
+#include "../res/assets.h"
 
 //
 
@@ -314,7 +315,7 @@ static bool objFaceQuad(const std::vector<ObjVertexCoords> &vs,
 }
 
 Model *Model::loadObj(const std::string &path) {
-    std::ifstream file(path);
+    std::ifstream file(Assets::getModelPath(path));
     Material *mat = nullptr;
 
     if (!file) {
