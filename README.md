@@ -2,6 +2,9 @@ modelr
 ======
 
 
+![](doc/scr0.png)
+
+
 A model renderer written by me to learn OpenGL and 3D graphics.
 
 
@@ -27,6 +30,7 @@ Planned features
 * Classes for different mesh types
 * View frustum culling (GLSL-side, if possible)
 * SSAO
+* Dynamic lights
 * Occlusion culling, if possible
 * Dynamic terrain loading/rendering, preferrably from heightmap
 * More optimizations
