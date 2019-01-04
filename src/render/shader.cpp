@@ -5,8 +5,6 @@
 #include "material.h"
 
 Shader::Shader(GLuint programID): m_programID{programID} {
-    initUniforms();
-
     glGenBuffers(1, &m_materialBufferID);
 
     glBindBuffer(GL_UNIFORM_BUFFER, m_materialBufferID);
@@ -14,6 +12,8 @@ Shader::Shader(GLuint programID): m_programID{programID} {
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_materialBufferID);
+
+    // Not changed
 }
 
 Shader::~Shader() {
@@ -26,16 +26,7 @@ void Shader::apply() {
 }
 
 void Shader::applyMaterial(Material *mat) {
-    glBindBuffer(GL_UNIFORM_BUFFER, m_materialBufferID);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MaterialUniformObject), &mat->uniformData);
-}
-
-void Shader::initUniforms() {
-    apply();
-    auto l = glGetUniformLocation(m_programID, "mSceneParams");
-    glUniformBlockBinding(m_programID, l, 0);
-    l = glGetUniformLocation(m_programID, "mMaterialParams");
-    glUniformBlockBinding(m_programID, l, 1);
+    glNamedBufferSubData(m_materialBufferID, 0, sizeof(MaterialUniformObject), &mat->uniformData);
 }
 
 static bool loadShaderSingle(const std::string &filename, GLenum shaderType, GLuint &shaderID) {

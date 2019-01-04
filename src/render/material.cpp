@@ -12,37 +12,19 @@ Material::~Material() {
 
 void Material::unbindAll() {
     s_boundMaterial = nullptr;
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0 + 1);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTextures(0, 2, NULL);
 }
 
 void Material::apply(Shader *shader) {
     if (s_boundMaterial == this) {
         return;
     }
-    s_boundMaterial = this;
-
-    glActiveTexture(GL_TEXTURE0);
-    if (m_map_Kd) {
-        m_map_Kd->bind();
-    } else {
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glActiveTexture(GL_TEXTURE0 + 1);
-    if (m_map_Bump) {
-        m_map_Bump->bind();
-    } else {
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
     auto l = shader->getUniformLocation("m_map_Kd");
     glUniform1i(l, 0);
     l = shader->getUniformLocation("m_map_Bump");
     glUniform1i(l, 1);
-
+    s_boundMaterial = this;
+    glBindTextures(0, 2, m_textureIDs);
     shader->applyMaterial(this);
 }
 
@@ -79,6 +61,7 @@ Material *Material::loadMtl(const std::string &path) {
                 return nullptr;
             }
 
+            res->m_textureIDs[0] = res->m_map_Kd->m_textureID;
             res->uniformData.m_Matopt |= 1;
         } else if (!strncmp(l, "map_Bump ", 8)) {
             // Normal map
@@ -104,6 +87,7 @@ Material *Material::loadMtl(const std::string &path) {
                 return nullptr;
             }
 
+            res->m_textureIDs[1] = res->m_map_Bump->m_textureID;
             res->uniformData.m_Matopt |= 2;
         }
     }

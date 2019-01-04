@@ -20,7 +20,10 @@ public:
     static Material *loadMtl(const std::string &path);
 
     MaterialUniformObject uniformData;
+
 private:
     Texture *m_map_Kd = nullptr;
     Texture *m_map_Bump = nullptr;
+
+    GLuint m_textureIDs[2] = { 0 };
 };

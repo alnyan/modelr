@@ -11,7 +11,5 @@ public:
 
     static Texture *loadPng(const std::string &filename);
 
-private:
-
     GLuint m_textureID;
 };
