@@ -3,18 +3,30 @@
 #include <fstream>
 #include <string.h>
 
+static Material *s_boundMaterial = nullptr;
+
 Material::~Material() {
     delete m_map_Kd;
     delete m_map_Bump;
 }
 
+void Material::unbindAll() {
+    s_boundMaterial = nullptr;
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0 + 1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 void Material::apply(Shader *shader) {
-    int matopt = 0;
+    if (s_boundMaterial == this) {
+        return;
+    }
+    s_boundMaterial = this;
 
     glActiveTexture(GL_TEXTURE0);
     if (m_map_Kd) {
         m_map_Kd->bind();
-        matopt |= 1;
     } else {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -22,18 +34,16 @@ void Material::apply(Shader *shader) {
     glActiveTexture(GL_TEXTURE0 + 1);
     if (m_map_Bump) {
         m_map_Bump->bind();
-        matopt |= 2;
     } else {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
-    shader->setMaterial1i(MaterialShaderData::MAT_map_Kd, 0);
-    shader->setMaterial1i(MaterialShaderData::MAT_map_Bump, 1);
-    shader->setMaterial1i(MaterialShaderData::MAT_Matopt, matopt);
-    shader->setMaterial3f(MaterialShaderData::MAT_Kd, m_Kd);
-    shader->setMaterial3f(MaterialShaderData::MAT_Ka, m_Ka);
-    shader->setMaterial3f(MaterialShaderData::MAT_Ks, m_Ks);
-    shader->setMaterial1f(MaterialShaderData::MAT_Ns, m_Ns);
+    auto l = shader->getUniformLocation("m_map_Kd");
+    glUniform1i(l, 0);
+    l = shader->getUniformLocation("m_map_Bump");
+    glUniform1i(l, 1);
+
+    shader->applyMaterial(this);
 }
 
 Material *Material::loadMtl(const std::string &path) {
@@ -46,16 +56,16 @@ Material *Material::loadMtl(const std::string &path) {
 
         if (!strncmp(l, "Ns ", 3)) {
             // Shininess
-            sscanf(l, "Ns %f", &res->m_Ns);
+            sscanf(l, "Ns %f", &res->uniformData.m_Ns);
         } else if (!strncmp(l, "Ka ", 3)) {
             // Ambient color
-            sscanf(l, "Ka %f %f %f", &res->m_Ka.x, &res->m_Ka.y, &res->m_Ka.z);
+            sscanf(l, "Ka %f %f %f", &res->uniformData.m_Ka.x, &res->uniformData.m_Ka.y, &res->uniformData.m_Ka.z);
         } else if (!strncmp(l, "Kd ", 3)) {
             // Diffuse color
-            sscanf(l, "Kd %f %f %f", &res->m_Kd.x, &res->m_Kd.y, &res->m_Kd.z);
+            sscanf(l, "Kd %f %f %f", &res->uniformData.m_Kd.x, &res->uniformData.m_Kd.y, &res->uniformData.m_Kd.z);
         } else if (!strncmp(l, "Ks ", 3)) {
             // Specular color
-            sscanf(l, "Ks %f %f %f", &res->m_Ks.x, &res->m_Ks.y, &res->m_Ks.z);
+            sscanf(l, "Ks %f %f %f", &res->uniformData.m_Ks.x, &res->uniformData.m_Ks.y, &res->uniformData.m_Ks.z);
         } else if (!strncmp(l, "map_Kd ", 7)) {
             // Diffuse map
             char path[1024];
@@ -68,6 +78,8 @@ Material *Material::loadMtl(const std::string &path) {
                 delete res;
                 return nullptr;
             }
+
+            res->uniformData.m_Matopt |= 1;
         } else if (!strncmp(l, "map_Bump ", 8)) {
             // Normal map
             char path[1024];
@@ -91,6 +103,8 @@ Material *Material::loadMtl(const std::string &path) {
                 delete res;
                 return nullptr;
             }
+
+            res->uniformData.m_Matopt |= 2;
         }
     }
 

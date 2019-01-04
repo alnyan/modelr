@@ -8,8 +8,6 @@
 
 class Camera: public GameObject {
 public:
-    const glm::mat4 &getMatrix() const;
-
     void lookAt(glm::vec3 f, glm::vec3 p);
 
     void bob(glm::vec3 f);
@@ -22,11 +20,11 @@ public:
     void setMode(bool mode);
 
     glm::vec3 dst, b;
+    glm::mat4 m_matrix;
 private:
     void updateMatrix();
 
     bool m_mode = true;
-    glm::mat4 m_matrix;
 };
 
 class Scene {
@@ -38,6 +36,14 @@ public:
     Camera &camera();
 
 private:
+
+    struct SceneUniformData {
+        glm::mat4 m_projectionMatrix;
+        glm::mat4 m_cameraMatrix;
+        glm::vec4 m_cameraPosition;
+        glm::vec4 m_cameraDestination;
+    } m_sceneUniformData;
+
     Shader *m_shader;
 
     std::list<GameObject *> m_allObjects;
@@ -45,5 +51,6 @@ private:
     std::list<MeshObject *> m_meshObjects;
 
     Camera m_camera;
-    glm::mat4 m_projectionMatrix;
+
+    GLuint m_sceneUniformBufferID;
 };

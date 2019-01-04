@@ -2,86 +2,40 @@
 #include <iostream>
 #include <fstream>
 #include <stdlib.h>
+#include "material.h"
 
 Shader::Shader(GLuint programID): m_programID{programID} {
-    if (m_type == SH_MATERIAL) {
-        MaterialShaderData *sh = new MaterialShaderData;
-        m_shaderData = sh;
+    initUniforms();
 
-        sh->m_map_Kd = glGetUniformLocation(m_programID, "m_map_Kd");
-        sh->m_map_Bump = glGetUniformLocation(m_programID, "m_map_Bump");
-        sh->m_Kd = glGetUniformLocation(m_programID, "m_Kd");
-        sh->m_Ka = glGetUniformLocation(m_programID, "m_Ka");
-        sh->m_Ks = glGetUniformLocation(m_programID, "m_Ks");
-        sh->m_Matopt = glGetUniformLocation(m_programID, "m_Matopt");
-        sh->m_Ns = glGetUniformLocation(m_programID, "m_Ns");
-    }
+    glGenBuffers(1, &m_materialBufferID);
+
+    glBindBuffer(GL_UNIFORM_BUFFER, m_materialBufferID);
+    glBufferData(GL_UNIFORM_BUFFER, 16 * 4, NULL, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, m_materialBufferID);
 }
 
 Shader::~Shader() {
     glDeleteProgram(m_programID);
-    free(m_shaderData);
+    glDeleteBuffers(1, &m_materialBufferID);
 }
 
 void Shader::apply() {
     glUseProgram(m_programID);
 }
 
-void Shader::setMaterial1i(MaterialShaderData::MaterialOption opt, int v) {
-    GLuint loc = 0;
-    MaterialShaderData *matData = (MaterialShaderData *) m_shaderData;
-
-    switch (opt) {
-    case MaterialShaderData::MAT_map_Kd:
-        loc = matData->m_map_Kd;
-        break;
-    case MaterialShaderData::MAT_map_Bump:
-        loc = matData->m_map_Bump;
-        break;
-    case MaterialShaderData::MAT_Matopt:
-        loc = matData->m_Matopt;
-        break;
-    default:
-        return;
-    }
-
-    glUniform1i(loc, v);
+void Shader::applyMaterial(Material *mat) {
+    glBindBuffer(GL_UNIFORM_BUFFER, m_materialBufferID);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(MaterialUniformObject), &mat->uniformData);
 }
 
-void Shader::setMaterial1f(MaterialShaderData::MaterialOption opt, GLfloat v) {
-    GLuint loc = 0;
-    MaterialShaderData *matData = (MaterialShaderData *) m_shaderData;
-
-    switch (opt) {
-    case MaterialShaderData::MAT_Ns:
-        loc = matData->m_Ns;
-        break;
-    default:
-        return;
-    }
-
-    glUniform1f(loc, v);
-}
-
-void Shader::setMaterial3f(MaterialShaderData::MaterialOption opt, const glm::vec3 &v) {
-    GLuint loc = 0;
-    MaterialShaderData *matData = (MaterialShaderData *) m_shaderData;
-
-    switch (opt) {
-    case MaterialShaderData::MAT_Ka:
-        loc = matData->m_Ka;
-        break;
-    case MaterialShaderData::MAT_Kd:
-        loc = matData->m_Kd;
-        break;
-    case MaterialShaderData::MAT_Ks:
-        loc = matData->m_Ks;
-        break;
-    default:
-        return;
-    }
-
-    glUniform3f(loc, v.x, v.y, v.z);
+void Shader::initUniforms() {
+    apply();
+    auto l = glGetUniformLocation(m_programID, "mSceneParams");
+    glUniformBlockBinding(m_programID, l, 0);
+    l = glGetUniformLocation(m_programID, "mMaterialParams");
+    glUniformBlockBinding(m_programID, l, 1);
 }
 
 static bool loadShaderSingle(const std::string &filename, GLenum shaderType, GLuint &shaderID) {

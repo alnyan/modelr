@@ -34,11 +34,23 @@ void init(void) {
 
     s_player = new GameObject();
     s_player->addChild(&s_scene->camera());
-    s_player->setWorldPosition({ 10, 10, 10 });
+
+    s_player->setWorldPosition({ 5, 2, 5 });
+    s_scene->camera().setRotation({ 0, 0, 0 });
 
     s_scene->add(s_player);
 
-    s_scene->camera().setRotation({ 0, 0, 0 });
+
+    // Test model
+    auto model = Model::loadObj("model.obj");
+
+    for (int i = 0; i < 100; ++i) {
+        for (int j = 0; j < 100; ++j) {
+            auto obj = new MeshObject({ glm::vec3(0), model });
+            obj->setWorldPosition({ i * 2, 0, j * 2 });
+            s_scene->add(obj);
+        }
+    }
 }
 
 void setup_gl(void) {
@@ -74,6 +86,7 @@ void render(void) {
 
     s_scene->render();
     Model::unbindAll();
+    Material::unbindAll();
 }
 
 //

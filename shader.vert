@@ -1,4 +1,4 @@
-#version 330 core
+#version 420 core
 
 layout(location = 0) in vec3 mVertex;
 layout(location = 1) in vec2 mTexCoord;
@@ -6,8 +6,13 @@ layout(location = 2) in vec3 mNormal;
 layout(location = 3) in vec3 mTangent;
 layout(location = 4) in vec3 mBitangent;
 
-uniform mat4 mProjectionMatrix;
-uniform mat4 mCameraMatrix;
+layout(std140,binding=0) uniform mSceneParams {
+    mat4 mProjectionMatrix;
+    mat4 mCameraMatrix;
+    vec4 mCameraPosition;
+    vec4 mCameraDestination;
+};
+
 uniform mat4 mModelMatrix;
 
 out vec3 mSourceVertex;

@@ -1,9 +1,6 @@
 #include "scene.h"
 #include <glm/gtc/matrix_transform.hpp>
-
-const glm::mat4 &Camera::getMatrix() const {
-    return m_matrix;
-}
+#include <iostream>
 
 void Camera::onUpdatePosition() {
     updateMatrix();
@@ -46,26 +43,34 @@ void Camera::updateMatrix() {
     }
 }
 
-Scene::Scene(Shader *s, glm::mat4 p): m_projectionMatrix{p}, m_shader{s} {
+Scene::Scene(Shader *s, glm::mat4 p): m_shader{s} {
+    m_sceneUniformData.m_projectionMatrix = p;
+
+    glGenBuffers(1, &m_sceneUniformBufferID);
+    glBindBuffer(GL_UNIFORM_BUFFER, m_sceneUniformBufferID);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(m_sceneUniformData), &m_sceneUniformData, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_sceneUniformBufferID);
 }
 
 void Scene::render() {
     m_shader->apply();
 
-    const auto &cameraMatrix = m_camera.getMatrix();
     auto cameraPos = m_camera.getWorldPosition();
-    auto l = m_shader->getUniformLocation("mProjectionMatrix");
-    glUniformMatrix4fv(l, 1, GL_FALSE, &m_projectionMatrix[0][0]);
-    l = m_shader->getUniformLocation("mCameraPosition");
-    glUniform3f(l, cameraPos.x, cameraPos.y, cameraPos.z);
-    l = m_shader->getUniformLocation("mCameraMatrix");
-    glUniformMatrix4fv(l, 1, GL_FALSE, &cameraMatrix[0][0]);
-    l = m_shader->getUniformLocation("mCameraDestination");
-    glUniform3f(l, m_camera.dst.x, m_camera.dst.y, m_camera.dst.z);
+    m_sceneUniformData.m_cameraMatrix = m_camera.m_matrix;
+    m_sceneUniformData.m_cameraPosition = glm::vec4(cameraPos, 1);
+    m_sceneUniformData.m_cameraDestination = glm::vec4(m_camera.dst, 1);
+
+    glBindBuffer(GL_UNIFORM_BUFFER, m_sceneUniformBufferID);
+    // Update everything except projection matrix
+    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4) + 2 * sizeof(glm::vec3), (void *)(((uintptr_t) &m_sceneUniformData) + sizeof(glm::mat4)));
 
     for (const auto &o: m_meshObjects) {
         o->render();
     }
+
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
 void Scene::add(GameObject *o) {
