@@ -17,6 +17,8 @@ void FPSCamera::setTarget(glm::vec3 t) {
 }
 
 void FPSCamera::onUpdatePosition() {
+    p_worldState[1] = glm::clamp(p_worldState[1], {-90, -180, 0}, {90, 180, 0});
+
     glm::mat4 matPitch(1), matYaw(1);
     matPitch = glm::rotate(matPitch, p_worldState[1].x, glm::vec3(1, 0, 0));
     matYaw = glm::rotate(matYaw, p_worldState[1].y, glm::vec3(0, 1, 0));

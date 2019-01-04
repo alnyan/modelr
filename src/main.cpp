@@ -53,7 +53,7 @@ int init(void) {
         return -1;
     }
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 100; ++i) {
         for (int j = 0; j < 10; ++j) {
             //auto obj = new MeshObject({ glm::vec3(0), model });
             auto obj = new MeshObject(model);
