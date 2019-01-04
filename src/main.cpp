@@ -14,10 +14,7 @@
 //
 
 static GLFWwindow *s_window;
-static Model *s_model;
 static Shader *s_shader;
-static Scene *s_scene;
-static GameObject *s_player;
 
 static constexpr float s_moveSpeed = 2;
 static double s_walkStart = 0;
@@ -25,40 +22,33 @@ static int m_width, m_height;
 static bool s_wDown = false;
 static double s_lastTime = 0;
 
-#define WWW 10
-#define HHH 10
-
 static glm::mat4 s_projectionMatrix;
 
+static Scene *s_scene;
+static GameObject *s_player;
+
 //
+
+void init(void) {
+    s_scene = new Scene(s_shader, s_projectionMatrix);
+
+    s_player = new GameObject();
+    s_player->addChild(&s_scene->camera());
+    s_player->setWorldPosition({ 10, 10, 10 });
+
+    s_scene->add(s_player);
+
+    s_scene->camera().setRotation({ 0, 0, 0 });
+}
 
 void setup_gl(void) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    s_model = Model::loadObj("model.obj");
     s_shader = Shader::loadShader("shader.vert", "shader.frag");
-
-    s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 100.0f);
+    s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
 
     glClearColor(0, 0.25, 0.25, 1);
-
-    s_scene = new Scene(s_shader, s_projectionMatrix);
-    for (int i = 0; i < WWW; ++i) {
-        for (int j = 0; j < HHH; ++j) {
-            MeshObject *o = new MeshObject({ glm::vec3(0), s_model });
-            o->setWorldPosition({ i * 2.0f, 0.0f, j * 2.0f });
-            s_scene->add(o);
-        }
-    }
-
-    s_player = new GameObject();
-    s_player->addChild(&s_scene->camera());
-    s_player->setWorldPosition({ 10, 2, 10 });
-
-    s_scene->add(s_player);
-
-    s_scene->camera().setRotation({ 0, 0, 0 });
 
     s_lastTime = glfwGetTime();
 }
@@ -147,6 +137,7 @@ int main() {
     glfwSwapInterval(1);
 
     setup_gl();
+    init();
     auto t0 = glfwGetTime();
     int frames = 0;
 

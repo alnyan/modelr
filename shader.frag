@@ -54,12 +54,18 @@ void main() {
 
     // Get tangent-basis matrix
     float normalBumpiness = 10;
-    vec3 mapNormal = (normalBumpiness * 2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(normalBumpiness);
-    mat3 matTBN = transpose(mat3(
-        normalize(mSourceTangent),
-        normalize(mSourceBitangent),
-        normalize(mapNormal)
-    ));
+    mat3 matTBN;
+    vec3 mapNormal;
+    if ((m_Matopt & 2) != 0) {
+        mapNormal = (normalBumpiness * 2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(normalBumpiness);
+        matTBN = transpose(mat3(
+            normalize(mSourceTangent),
+            normalize(mSourceBitangent),
+            normalize(mapNormal)
+        ));
+    } else {
+        mapNormal = mSourceNormal;
+    }
 
     // Light params
     vec3 lightVec = normalize(lightPos - mSourceVertex);

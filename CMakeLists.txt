@@ -15,7 +15,7 @@ set(SOURCES src/main.cpp
             src/render/model.cpp
             src/render/shader.cpp
             src/render/texture.cpp
-            src/lodepng.cpp
+            src/res/lodepng.cpp
             src/render/material.cpp
             src/gameobject.cpp
             src/scene.cpp)

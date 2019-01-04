@@ -49,8 +49,13 @@ MeshObject::MeshObject(ModelMesh m): m_mesh{m} {
     onUpdatePosition();
 }
 
+void MeshObject::setScale(glm::vec3 s) {
+    m_scale = s;
+    onUpdatePosition();
+}
+
 void MeshObject::onUpdatePosition() {
-    m_modelMatrix = glm::translate(glm::mat4(1.0f), getWorldPosition());
+    m_modelMatrix = glm::translate(glm::scale(glm::mat4(1.0f), m_scale), getWorldPosition());
 }
 
 void MeshObject::setShader(Shader *s) {

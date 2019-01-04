@@ -9,9 +9,12 @@ Material::~Material() {
 }
 
 void Material::apply(Shader *shader) {
+    int matopt = 0;
+
     glActiveTexture(GL_TEXTURE0);
     if (m_map_Kd) {
         m_map_Kd->bind();
+        matopt |= 1;
     } else {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -19,13 +22,14 @@ void Material::apply(Shader *shader) {
     glActiveTexture(GL_TEXTURE0 + 1);
     if (m_map_Bump) {
         m_map_Bump->bind();
+        matopt |= 2;
     } else {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
     shader->setMaterial1i(MaterialShaderData::MAT_map_Kd, 0);
     shader->setMaterial1i(MaterialShaderData::MAT_map_Bump, 1);
-    shader->setMaterial1i(MaterialShaderData::MAT_Matopt, 1);
+    shader->setMaterial1i(MaterialShaderData::MAT_Matopt, matopt);
     shader->setMaterial3f(MaterialShaderData::MAT_Kd, m_Kd);
     shader->setMaterial3f(MaterialShaderData::MAT_Ka, m_Ka);
     shader->setMaterial3f(MaterialShaderData::MAT_Ks, m_Ks);

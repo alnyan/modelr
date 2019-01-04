@@ -31,6 +31,7 @@ class MeshObject: public GameObject {
 public:
     MeshObject(ModelMesh m);
 
+    void setScale(glm::vec3 scale);
     void setShader(Shader *sh);
     void render();
 
@@ -40,5 +41,6 @@ private:
     Shader *m_shader;
     ModelMesh m_mesh;
 
+    glm::vec3 m_scale = glm::vec3(1, 1, 1);
     glm::mat4 m_modelMatrix;
 };
