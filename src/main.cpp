@@ -9,7 +9,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
 #include "scene.h"
-#include <glm/gtx/euler_angles.hpp>
+#include "fpscamera.h"
+#include "render/meshobject.h"
 
 //
 
@@ -29,7 +30,7 @@ static glm::mat4 s_projectionMatrix;
 
 static Scene *s_scene;
 static GameObject *s_player;
-
+static Camera *s_camera;
 
 //
 
@@ -37,12 +38,13 @@ int init(void) {
     s_scene = new Scene(s_shader, s_projectionMatrix);
 
     s_player = new GameObject();
-    s_player->addChild(&s_scene->camera());
+    s_camera = new FPSCamera(s_player);
 
-    s_player->setWorldPosition({ 5, 2, 5 });
-    s_scene->camera().setRotation({ 0, 0, 0 });
+    s_player->setPosition({ 0, 0, 0 });
+    s_camera->setRotation({ -45, -45, 0 });
 
     s_scene->add(s_player);
+    s_scene->setActiveCamera(s_camera);
 
     // Test model
     auto model = Model::loadObj("model.obj");
@@ -53,8 +55,9 @@ int init(void) {
 
     for (int i = 0; i < 10; ++i) {
         for (int j = 0; j < 10; ++j) {
-            auto obj = new MeshObject({ glm::vec3(0), model });
-            obj->setWorldPosition({ i * 2, 0, j * 2 });
+            //auto obj = new MeshObject({ glm::vec3(0), model });
+            auto obj = new MeshObject(model);
+            obj->setPosition({ i * 2, 0, j * 2 });
             s_scene->add(obj);
         }
     }
@@ -89,13 +92,12 @@ void render(void) {
     // Move camera
     double wt = t - s_walkStart;
     double bobf = 0.05 * sin(wt * 10) * s_wDown;
-    double ry = s_scene->camera().dst.y;
+    double ry = s_camera->getWorldRotation().y;
     float dx = s_moveSpeed * sin(ry) * dt * s_wDown;
     float dz = -s_moveSpeed * cos(ry) * dt * s_wDown;
     glm::vec3 delta(dx, 0, dz);
-    glm::vec3 bob(-bobf * sin(ry + M_PI / 2), bobf, bobf * cos(ry + M_PI / 2));
+    //glm::vec3 bob(-bobf * sin(ry + M_PI / 2), bobf, bobf * cos(ry + M_PI / 2));
 
-    s_scene->camera().bob(bob);
     s_player->translate(delta);
 
     s_scene->render();
@@ -122,7 +124,7 @@ void cursorPosCallback(GLFWwindow *win, double x, double y) {
 
     glfwSetCursorPos(win, m_width / 2, m_height / 2);
 
-    s_scene->camera().rotate(glm::vec3(cy * 1.5, cx * 1.5, 0));
+    s_camera->rotate(glm::vec3(cy * 1.5, cx * 1.5, 0));
 }
 
 void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {

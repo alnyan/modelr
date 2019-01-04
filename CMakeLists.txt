@@ -19,7 +19,9 @@ set(SOURCES src/main.cpp
             src/render/material.cpp
             src/gameobject.cpp
             src/scene.cpp
-            src/res/assets.cpp)
+            src/res/assets.cpp
+            src/render/meshobject.cpp
+            src/fpscamera.cpp)
 
 include_directories(${INCLUDE_DIRS})
 
