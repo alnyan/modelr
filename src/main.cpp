@@ -22,10 +22,14 @@ static int m_width, m_height;
 static bool s_wDown = false;
 static double s_lastTime = 0;
 
+static double s_meanFrameTime = 0;
+static double s_frameTimeSum = 0;
+
 static glm::mat4 s_projectionMatrix;
 
 static Scene *s_scene;
 static GameObject *s_player;
+
 
 //
 
@@ -40,12 +44,11 @@ void init(void) {
 
     s_scene->add(s_player);
 
-
     // Test model
     auto model = Model::loadObj("model.obj");
 
-    for (int i = 0; i < 100; ++i) {
-        for (int j = 0; j < 100; ++j) {
+    for (int i = 0; i < 10; ++i) {
+        for (int j = 0; j < 10; ++j) {
             auto obj = new MeshObject({ glm::vec3(0), model });
             obj->setWorldPosition({ i * 2, 0, j * 2 });
             s_scene->add(obj);
@@ -66,11 +69,11 @@ void setup_gl(void) {
 }
 
 void render(void) {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     auto t = glfwGetTime();
     auto dt = t - s_lastTime;
     s_lastTime = t;
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Move camera
     double wt = t - s_walkStart;
@@ -87,6 +90,10 @@ void render(void) {
     s_scene->render();
     Model::unbindAll();
     Material::unbindAll();
+
+    auto r = glfwGetTime();
+
+    s_frameTimeSum += r - t;
 }
 
 //
@@ -95,7 +102,7 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     glViewport(0, 0, width, height);
     m_width = width;
     m_height = height;
-    s_projectionMatrix = glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f);
+    s_scene->setProjectionMatrix(glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f));
 }
 
 void cursorPosCallback(GLFWwindow *win, double x, double y) {
@@ -158,8 +165,11 @@ int main() {
         auto t1 = glfwGetTime();
         if (t1 - t0 > 1) {
             std::cout << frames << " frames" << std::endl;
+            std::cout << s_frameTimeSum << " sec" << std::endl;
+            std::cout << (s_frameTimeSum / frames) << " s/f" << std::endl;
             t0 = t1;
             frames = 0;
+            s_frameTimeSum = 0;
         }
 
         render();

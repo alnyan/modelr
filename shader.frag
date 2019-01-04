@@ -67,7 +67,7 @@ void main() {
     }
 
     // Get tangent-basis matrix
-    float normalBumpiness = 10;
+    float normalBumpiness = 1;
     mat3 matTBN;
     vec3 mapNormal;
     if ((m_smallopts.m_Matopt & 2) != 0) {
@@ -94,6 +94,7 @@ void main() {
 
     color =
         res_Kd +
-        res_Ks;
+        res_Ks +
+        m_Kd.rgb * 0.1;
         //0;
 }

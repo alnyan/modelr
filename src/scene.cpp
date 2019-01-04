@@ -2,6 +2,11 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
+void Camera::setMode(bool m) {
+    m_mode = m;
+    updateMatrix();
+}
+
 void Camera::onUpdatePosition() {
     updateMatrix();
 }
@@ -54,6 +59,12 @@ Scene::Scene(Shader *s, glm::mat4 p): m_shader{s} {
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_sceneUniformBufferID);
 }
 
+void Scene::setProjectionMatrix(glm::mat4 m) {
+    m_sceneUniformData.m_projectionMatrix = m;
+
+    glNamedBufferSubData(m_sceneUniformBufferID, 0, sizeof(glm::mat4), &m_sceneUniformData);
+}
+
 void Scene::render() {
     m_shader->apply();
 
@@ -62,15 +73,13 @@ void Scene::render() {
     m_sceneUniformData.m_cameraPosition = glm::vec4(cameraPos, 1);
     m_sceneUniformData.m_cameraDestination = glm::vec4(m_camera.dst, 1);
 
-    glBindBuffer(GL_UNIFORM_BUFFER, m_sceneUniformBufferID);
     // Update everything except projection matrix
-    glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4) + 2 * sizeof(glm::vec3), (void *)(((uintptr_t) &m_sceneUniformData) + sizeof(glm::mat4)));
+    glNamedBufferSubData(m_sceneUniformBufferID, sizeof(glm::mat4), sizeof(m_sceneUniformData) - sizeof(glm::mat4),
+            (void *) ((uintptr_t) &m_sceneUniformData + sizeof(glm::mat4)));
 
     for (const auto &o: m_meshObjects) {
         o->render();
     }
-
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
 void Scene::add(GameObject *o) {

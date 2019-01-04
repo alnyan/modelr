@@ -19,7 +19,7 @@ public:
 
     void setMode(bool mode);
 
-    glm::vec3 dst, b;
+    glm::vec3 dst, b = { 0, 0, 0 };
     glm::mat4 m_matrix;
 private:
     void updateMatrix();
@@ -34,6 +34,8 @@ public:
     void add(GameObject *);
     void render();
     Camera &camera();
+
+    void setProjectionMatrix(glm::mat4 m);
 
 private:
 
