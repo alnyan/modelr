@@ -2,7 +2,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
-MeshObject::MeshObject(GLint m, GameObject *parent): GameObject(parent), m_model{m} {}
+MeshObject::MeshObject(Model m, GameObject *parent): GameObject(parent), m_model{m} {}
 
 void MeshObject::onUpdatePosition() {
     m_modelMatrix = glm::translate(glm::mat4(1), p_worldState[0]);

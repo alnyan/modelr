@@ -1,4 +1,5 @@
-#version 420 core
+#version 430 core
+#extension GL_ARB_shader_draw_parameters : enable
 
 layout(location = 0) in vec3 mVertex;
 layout(location = 1) in vec2 mTexCoord;
@@ -13,7 +14,9 @@ layout(std140,binding=0) uniform mSceneParams {
     vec4 mCameraDestination;
 };
 
-uniform mat4 mModelMatrix;
+layout(std430,binding=1) buffer mModelParams {
+    mat4 mModelMatrices[];
+};
 
 out vec3 mSourceVertex;
 out vec3 mSourceNormal;
@@ -22,6 +25,8 @@ out vec3 mSourceTangent;
 out vec3 mSourceBitangent;
 
 void main() {
+    mat4 mModelMatrix = mModelMatrices[gl_DrawIDARB];
+
     mSourceVertex = (mModelMatrix * vec4(mVertex, 1.0)).xyz;
     mSourceNormal = mNormal;
     mSourceTexCoord = mTexCoord;

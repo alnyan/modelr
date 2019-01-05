@@ -33,18 +33,8 @@ static GLuint s_renderMode = GL_TRIANGLES;
 
 static glm::mat4 s_projectionMatrix;
 
-typedef struct {
-    GLuint count, instanceCount, first, baseInstance;
-} DrawArraysIndirectCommand;
-
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
-static GLuint s_modelMatrixBufferID, s_indirectCommandBufferID;
-static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
-static std::vector<glm::mat4> s_modelMatrices;
-
-static double s_transferTime, s_drawCallTime;
-
 static MeshBuilder *s_allGeometryBuilder;
 static Model s_models[3];
 
@@ -113,21 +103,6 @@ int init(void) {
     s_scene->setDestinationBuffer(s_sceneBuffer);
 #endif
 
-    // Setup drawcalls
-
-    for (int i = -5; i < 5; ++i) {
-        for (int j = -5; j < 5; ++j) {
-            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
-            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
-        }
-    }
-
-    //s_indirectCommands.push_back({ s_models[1].size, 1, s_models[1].begin, 0 });
-    //s_modelMatrices.push_back(glm::mat4(1));
-
-    glNamedBufferData(s_indirectCommandBufferID, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
-    glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_STATIC_DRAW);
-
     return 0;
 }
 
@@ -142,6 +117,11 @@ int setup_gl(void) {
     }
 #endif
 
+    //s_shader = Shader::loadShader("shader.vert", "shader.frag");
+    //if (!s_shader) {
+        //std::cerr << "Failed to load shaders" << std::endl;
+        //return -1;
+    //}
     s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
 
 #ifdef RENDER_TO_TEXTURE
@@ -184,14 +164,6 @@ int setup_gl(void) {
 
     glClearColor(0, 0.25, 0.25, 1);
 
-    glGenBuffers(1, &s_modelMatrixBufferID);
-    glGenBuffers(1, &s_indirectCommandBufferID);
-
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, s_modelMatrixBufferID);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, s_modelMatrixBufferID);
 
     s_lastTime = glfwGetTime();
 
@@ -220,9 +192,7 @@ void render(void) {
 
     s_player->translate(delta);
 
-    auto t0 = glfwGetTime();
     glUseProgram(s_sceneShaderID);
-
     s_scene->render();
 
     glBindVertexArray(s_allGeometryArrayID);
@@ -231,19 +201,13 @@ void render(void) {
     glEnableVertexAttribArray(2);
     glEnableVertexAttribArray(5); // Model matrices
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, s_modelMatrixBufferID);
-    //glBufferData(GL_SHADER_STORAGE_BUFFER, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
+    // Upload dynamic mesh model matrix data
+    glBindBuffer(GL_ARRAY_BUFFER, s_modelMatrixBufferID);
+    glBufferData(GL_ARRAY_BUFFER, 2 /* Object number */ * sizeof(glm::mat4), s_modelMatrices, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribDivisor(5, 4);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    auto t1 = glfwGetTime();
-
-    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
-
-    auto t2 = glfwGetTime();
-    s_transferTime = t1 - t0;
-    s_drawCallTime = t2 - t1;
-
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
@@ -395,15 +359,11 @@ int main() {
         auto t1 = glfwGetTime();
         if (t1 - t0 > 1) {
             std::cout << frames << " frames" << std::endl;
-            std::cout << s_frameTimeSum * 1000 << " ms" << std::endl;
-            std::cout << (s_frameTimeSum / frames) * 1000 << " ms/frame" << std::endl;
-            std::cout << (s_drawCallTime / frames) * 1000 << " ms/draw" << std::endl;
-            std::cout << (s_transferTime / frames) * 1000 << " ms/xfer" << std::endl;
+            std::cout << s_frameTimeSum << " sec" << std::endl;
+            std::cout << (s_frameTimeSum / frames) << " s/f" << std::endl;
             t0 = t1;
             frames = 0;
             s_frameTimeSum = 0;
-            s_drawCallTime = 0;
-            s_transferTime = 0;
         }
 
         render();

@@ -1,4 +1,4 @@
-#version 420 core
+#version 430 core
 
 in vec3 mSourceVertex;
 in vec3 mSourceNormal;
@@ -27,14 +27,16 @@ layout(std140,binding=1) uniform mMaterialParams {
     MaterialSmallOpts m_smallopts;
 };
 
-uniform mat4 mModelMatrix;
+layout(std430,binding=1) buffer mModelParams {
+    mat4 mModelMatrices[];
+};
 
 layout(location = 0) out vec3 color;
 
 const vec3 lightColor = vec3(1, 1, 1);
-const vec3 lightPos = vec3(5, 5, 5); // Assume this
+const vec3 lightPos = vec3(0, 3, 0); // Assume this
 const float ambientIntensity = 0.1f;
-const float diffuseIntensity = 10;
+const float diffuseIntensity = 0.5f;
 
 const vec3 fogColor = vec3(0, 0.25, 0.25);
 const float fogDensity = 0.05;
@@ -67,6 +69,7 @@ void main() {
         diffuseColor = m_Kd.rgb * texture(m_map_Kd, mSourceTexCoord).rgb;
     } else {
         diffuseColor = m_Kd.rgb;
+        diffuseColor = vec3(1, 0, 0);
     }
 
     // Get tangent-basis matrix
@@ -74,12 +77,13 @@ void main() {
     mat3 matTBN;
     vec3 mapNormal;
     if ((m_smallopts.m_Matopt & 2) != 0) {
-        mapNormal = (normalBumpiness * 2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(normalBumpiness);
-        matTBN = transpose(mat3(
-            normalize(mSourceTangent),
-            normalize(mSourceBitangent),
-            normalize(mapNormal)
-        ));
+        //mapNormal = (normalBumpiness * 2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(normalBumpiness);
+        //matTBN = transpose(mat3(
+            //normalize(mSourceTangent),
+            //normalize(mSourceBitangent),
+            //normalize(mapNormal)
+        //));
+        mapNormal = mSourceNormal;
     } else {
         mapNormal = mSourceNormal;
     }
@@ -95,7 +99,9 @@ void main() {
     // Specular component
     vec3 res_Ks = funKs(lightColor, mapNormal, lightVec, eyeVec, lightDist, eyeDist);
 
-    vec3 res_color = res_Kd + res_Ks + m_Kd.rgb * 0.1;
+    vec3 res_color = res_Kd
+                   //+ res_Ks
+                   + m_Kd.rgb * 0.1;
 
     float d = length(mSourceVertex - mCameraPosition.xyz);
     float fogFactor = 1 / exp(fogDensity * d);

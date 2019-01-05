@@ -38,9 +38,15 @@ public:
      */
     GLuint beginShape();
 
+    /**
+     * @brief Returns the size of the shape
+     */
+    GLuint endShape();
+
 private:
     std::vector<MeshVertexAttrib> m_vertexData;
 
+    GLuint m_marker;
     glm::vec3 m_normal;
     glm::vec2 m_texCoord;
     GLuint m_geometryBufferID;

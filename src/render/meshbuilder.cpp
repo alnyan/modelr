@@ -41,7 +41,12 @@ void MeshBuilder::commit() {
 }
 
 GLuint MeshBuilder::beginShape() {
+    m_marker = m_vertexCount;
     return m_vertexCount;
+}
+
+GLuint MeshBuilder::endShape() {
+    return m_vertexCount - m_marker;
 }
 
 void MeshBuilder::normal(glm::vec3 n) {

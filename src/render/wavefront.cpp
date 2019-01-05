@@ -162,7 +162,7 @@ static bool wfQuad(MeshBuilder *mesh,
     return true;
 }
 
-bool Wavefront::loadObj(GLuint &model, GLuint &mat, MeshBuilder *mesh, const char *path) {
+bool Wavefront::loadObj(Model *model, GLuint &mat, MeshBuilder *mesh, const char *path) {
     // TODO: material loading
     std::ifstream file(Assets::getModelPath(path));
     std::vector<glm::vec3> vertexData;
@@ -179,7 +179,7 @@ bool Wavefront::loadObj(GLuint &model, GLuint &mat, MeshBuilder *mesh, const cha
     std::cout << "Load model " << path << std::endl;
 
     // Begin new mesh
-    model = mesh->beginShape();
+    model->begin = mesh->beginShape();
 
     while (std::getline(file, line)) {
         if (line.empty() || line[0] == '#') {
@@ -233,6 +233,8 @@ bool Wavefront::loadObj(GLuint &model, GLuint &mat, MeshBuilder *mesh, const cha
             }
         }
     }
+
+    model->size = mesh->endShape();
 
     return true;
 }
