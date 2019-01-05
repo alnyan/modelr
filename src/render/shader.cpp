@@ -65,22 +65,22 @@ static bool loadShaderSingle(const std::string &filename, GLenum shaderType, GLu
     return true;
 }
 
-Shader *Shader::loadShader(const std::string &vertFile, const std::string &fragFile) {
+bool Shader::loadProgram(const std::string &vertFile, const std::string &fragFile, GLuint &progID) {
     GLuint vertShaderID, fragShaderID;
     GLint status, errorLength;
 
     if (!loadShaderSingle(vertFile, GL_VERTEX_SHADER, vertShaderID)) {
         std::cerr << "Failed to load vertex shader" << std::endl;
-        return nullptr;
+        return false;
     }
 
     if (!loadShaderSingle(fragFile, GL_FRAGMENT_SHADER, fragShaderID)) {
         std::cerr << "Failed to load fragment shader" << std::endl;
         glDeleteShader(vertShaderID);
-        return nullptr;
+        return false;
     }
 
-    GLuint progID = glCreateProgram();
+    progID = glCreateProgram();
     glAttachShader(progID, vertShaderID);
     glAttachShader(progID, fragShaderID);
     glLinkProgram(progID);
@@ -100,7 +100,7 @@ Shader *Shader::loadShader(const std::string &vertFile, const std::string &fragF
         glDeleteShader(vertShaderID);
         glDeleteShader(fragShaderID);
 
-        return nullptr;
+        return false;
     }
 
     glDetachShader(progID, vertShaderID);
@@ -108,6 +108,14 @@ Shader *Shader::loadShader(const std::string &vertFile, const std::string &fragF
     glDeleteShader(vertShaderID);
     glDeleteShader(fragShaderID);
 
+    return true;
+}
+
+Shader *Shader::loadShader(const std::string &vertFile, const std::string &fragFile) {
+    GLuint progID;
+    if (!loadProgram(vertFile, fragFile, progID)) {
+        return nullptr;
+    }
     return new Shader(progID);
 }
 

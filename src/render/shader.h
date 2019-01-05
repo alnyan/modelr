@@ -22,6 +22,7 @@ public:
     GLuint getUniformLocation(const std::string &name);
 
     static Shader *loadShader(const std::string &vertFile, const std::string &fragFile);
+    static bool loadProgram(const std::string &vertFile, const std::string &fragFile, GLuint &p);
 
 private:
 

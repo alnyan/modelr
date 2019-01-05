@@ -134,10 +134,10 @@ void Model::bind(Shader *shader) {
     s_boundModel = this;
 
     glBindVertexArray(m_buffer.arrayID);
+
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
-
     if (m_buffer.flags & 1) {
         glEnableVertexAttribArray(3);
         glEnableVertexAttribArray(4);

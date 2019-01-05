@@ -29,12 +29,15 @@ layout(std140,binding=1) uniform mMaterialParams {
 
 uniform mat4 mModelMatrix;
 
-out vec3 color;
+layout(location = 0) out vec3 color;
 
 const vec3 lightColor = vec3(1, 1, 1);
 const vec3 lightPos = vec3(5, 5, 5); // Assume this
 const float ambientIntensity = 0.1f;
 const float diffuseIntensity = 10;
+
+const vec3 fogColor = vec3(0, 0.25, 0.25);
+const float fogDensity = 0.05;
 
 uniform sampler2D m_map_Kd;
 uniform sampler2D m_map_Bump;
@@ -92,9 +95,9 @@ void main() {
     // Specular component
     vec3 res_Ks = funKs(lightColor, mapNormal, lightVec, eyeVec, lightDist, eyeDist);
 
-    color =
-        res_Kd +
-        res_Ks +
-        m_Kd.rgb * 0.1;
-        //0;
+    vec3 res_color = res_Kd + res_Ks + m_Kd.rgb * 0.1;
+
+    float d = length(mSourceVertex - mCameraPosition.xyz);
+    float fogFactor = 1 / exp(fogDensity * d);
+    color = mix(fogColor, res_color, fogFactor);
 }

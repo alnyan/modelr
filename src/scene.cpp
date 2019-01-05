@@ -13,6 +13,17 @@ Scene::Scene(Shader *s, glm::mat4 p): m_shader{s} {
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_sceneUniformBufferID);
 }
 
+#ifdef RENDER_TO_TEXTURE
+void Scene::setViewport(int w, int h) {
+    m_width = w;
+    m_height = h;
+}
+
+void Scene::setDestinationBuffer(GLuint fbo) {
+    m_destinationBuffer = fbo;
+}
+#endif
+
 void Scene::setProjectionMatrix(glm::mat4 m) {
     m_sceneUniformData.m_projectionMatrix = m;
     glNamedBufferSubData(m_sceneUniformBufferID, 0, sizeof(glm::mat4), &m_sceneUniformData);
@@ -26,6 +37,12 @@ void Scene::render() {
     if (!m_activeCamera) {
         return;
     }
+
+#ifdef RENDER_TO_TEXTURE
+    glBindFramebuffer(GL_FRAMEBUFFER, m_destinationBuffer);
+    glViewport(0, 0, m_width, m_height);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+#endif
 
     m_shader->apply();
 
@@ -45,6 +62,10 @@ void Scene::render() {
     for (const auto &o: m_meshObjects) {
         o->render();
     }
+
+#ifdef RENDER_TO_TEXTURE
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#endif
 }
 
 void Scene::add(GameObject *o) {

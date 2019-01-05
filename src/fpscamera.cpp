@@ -1,5 +1,6 @@
 #include "fpscamera.h"
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 FPSCamera::FPSCamera(GameObject *parent): Camera(parent) {}
 
@@ -17,7 +18,7 @@ void FPSCamera::setTarget(glm::vec3 t) {
 }
 
 void FPSCamera::onUpdatePosition() {
-    p_worldState[1] = glm::clamp(p_worldState[1], {-90, -180, 0}, {90, 180, 0});
+    p_localState[1].x = glm::clamp(p_localState[1].x, (float) -M_PI/2, (float) M_PI/2);
 
     glm::mat4 matPitch(1), matYaw(1);
     matPitch = glm::rotate(matPitch, p_worldState[1].x, glm::vec3(1, 0, 0));
