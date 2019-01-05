@@ -50,16 +50,11 @@ void Scene::render() {
     m_sceneUniformData.m_cameraPosition = glm::vec4(m_activeCamera->getWorldPosition(), 1);
     m_sceneUniformData.m_cameraDestination = glm::vec4(m_activeCamera->getTarget(), 1);
 
-    //glm::vec3 p0(5, 5, 5), p1(0, 0, 0);
-    //m_sceneUniformData.m_cameraMatrix = glm::lookAt(p0, p1, glm::vec3(0, 1, 0));
-    //m_sceneUniformData.m_cameraPosition = glm::vec4(p0, 1);
-    //m_sceneUniformData.m_cameraDestination = glm::vec4(p1, 1);
-
     // Update everything except projection matrix
     glNamedBufferSubData(m_sceneUniformBufferID, sizeof(glm::mat4), sizeof(m_sceneUniformData) - sizeof(glm::mat4),
             (void *) ((uintptr_t) &m_sceneUniformData + sizeof(glm::mat4)));
 
-    for (const auto &o: m_meshObjects) {
+    for (const auto &o: meshObjects) {
         o->render();
     }
 
@@ -69,10 +64,10 @@ void Scene::render() {
 }
 
 void Scene::add(GameObject *o) {
-    m_allObjects.push_back(o);
+    allObjects.push_back(o);
     if (MeshObject *m = dynamic_cast<MeshObject *>(o)) {
         m->setShader(m_shader);
-        m_meshObjects.push_back(m);
+        meshObjects.push_back(m);
     }
 }
 

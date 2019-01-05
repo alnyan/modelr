@@ -19,6 +19,9 @@ public:
 
     void setProjectionMatrix(glm::mat4 m);
 
+    std::list<GameObject *> allObjects;
+    // For faster drawing
+    std::list<MeshObject *> meshObjects;
 private:
 
     struct SceneUniformData {
@@ -33,10 +36,6 @@ private:
     GLuint m_destinationBuffer = 0;
     int m_width, m_height;
 #endif
-
-    std::list<GameObject *> m_allObjects;
-    // For faster drawing
-    std::list<MeshObject *> m_meshObjects;
 
     Camera *m_activeCamera = nullptr;
 

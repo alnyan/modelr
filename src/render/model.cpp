@@ -173,8 +173,8 @@ void Model::unbind(Shader *shader) {
     glBindVertexArray(0);
 }
 
-void Model::render(Shader *shader) {
-    glDrawArrays(GL_TRIANGLES, 0, m_buffer.vertexCount);
+void Model::render(Shader *shader, GLuint mode) {
+    glDrawArrays(mode, 0, m_buffer.vertexCount);
 }
 
 static bool objParseIndex(const char *index, int &v, int &t, int &n) {

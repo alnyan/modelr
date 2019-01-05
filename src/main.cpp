@@ -29,6 +29,8 @@ static int s_fly = 0;
 static double s_meanFrameTime = 0;
 static double s_frameTimeSum = 0;
 
+static GLuint s_renderMode = GL_TRIANGLES;
+
 static glm::mat4 s_projectionMatrix;
 
 static Scene *s_scene;
@@ -80,6 +82,7 @@ int init(void) {
             //auto obj = new MeshObject({ glm::vec3(0), model });
             auto obj = new MeshObject(model);
             obj->setPosition({ i * 2, 0, j * 2 });
+            obj->setRenderMode(s_renderMode);
             s_scene->add(obj);
         }
     }
@@ -257,6 +260,18 @@ void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
     }
     if (key == GLFW_KEY_LEFT_SHIFT) {
         s_fly = -!!action;
+    }
+
+    if (key == GLFW_KEY_M && action == 1) {
+        if (s_renderMode == GL_TRIANGLES) {
+            s_renderMode = GL_LINES;
+        } else {
+            s_renderMode = GL_TRIANGLES;
+        }
+
+        for (auto &obj: s_scene->meshObjects) {
+            obj->setRenderMode(s_renderMode);
+        }
     }
 }
 

@@ -63,7 +63,7 @@ public:
     Model(VertexBuffer b, Material *mt);
     ~Model();
 
-    void render(Shader *shader);
+    void render(Shader *shader, GLuint mode = GL_TRIANGLES);
     void bind(Shader *shader);
     void unbind(Shader *shader);
     static void unbindAll();

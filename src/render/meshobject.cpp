@@ -12,10 +12,14 @@ void MeshObject::setShader(Shader *s) {
     m_shader = s;
 }
 
+void MeshObject::setRenderMode(GLuint mode) {
+    m_renderMode = mode;
+}
+
 void MeshObject::render() {
     auto l = m_shader->getUniformLocation("mModelMatrix");
     glUniformMatrix4fv(l, 1, GL_FALSE, &m_modelMatrix[0][0]);
 
     m_model->bind(m_shader);
-    m_model->render(m_shader);
+    m_model->render(m_shader, m_renderMode);
 }

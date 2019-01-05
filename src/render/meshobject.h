@@ -13,8 +13,10 @@ public:
 
     void render();
     void setShader(Shader *s);
+    void setRenderMode(GLuint mode);
 
 private:
+    GLuint m_renderMode = GL_TRIANGLES;
     Shader *m_shader;
     Model *m_model;
     glm::mat4 m_modelMatrix;
