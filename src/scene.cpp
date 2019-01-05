@@ -2,7 +2,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
-Scene::Scene(Shader *s, glm::mat4 p): m_shader{s} {
+Scene::Scene(glm::mat4 p) {
     m_sceneUniformData.m_projectionMatrix = p;
 
     glGenBuffers(1, &m_sceneUniformBufferID);
@@ -44,7 +44,7 @@ void Scene::render() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 #endif
 
-    m_shader->apply();
+    //m_shader->apply();
 
     m_sceneUniformData.m_cameraMatrix = m_activeCamera->getMatrix();
     m_sceneUniformData.m_cameraPosition = glm::vec4(m_activeCamera->getWorldPosition(), 1);
@@ -54,9 +54,9 @@ void Scene::render() {
     glNamedBufferSubData(m_sceneUniformBufferID, sizeof(glm::mat4), sizeof(m_sceneUniformData) - sizeof(glm::mat4),
             (void *) ((uintptr_t) &m_sceneUniformData + sizeof(glm::mat4)));
 
-    for (const auto &o: meshObjects) {
-        o->render();
-    }
+    //for (const auto &o: meshObjects) {
+        //o->render();
+    //}
 
 #ifdef RENDER_TO_TEXTURE
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -66,7 +66,7 @@ void Scene::render() {
 void Scene::add(GameObject *o) {
     allObjects.push_back(o);
     if (MeshObject *m = dynamic_cast<MeshObject *>(o)) {
-        m->setShader(m_shader);
+        //m->setShader(m_shader);
         meshObjects.push_back(m);
     }
 }

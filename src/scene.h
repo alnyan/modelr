@@ -1,13 +1,14 @@
 #pragma once
+#include <GL/glew.h>
 #include <glm/glm.hpp>
 #include "gameobject.h"
 #include "camera.h"
-#include "render/shader.h"
+//#include "render/shader.h"
 #include "render/meshobject.h"
 
 class Scene {
 public:
-    Scene(Shader *s, glm::mat4 projection);
+    Scene(glm::mat4 projection);
 
     void add(GameObject *);
     void render();
@@ -31,7 +32,7 @@ private:
         glm::vec4 m_cameraDestination;
     } m_sceneUniformData;
 
-    Shader *m_shader;
+    //Shader *m_shader;
 #ifdef RENDER_TO_TEXTURE
     GLuint m_destinationBuffer = 0;
     int m_width, m_height;

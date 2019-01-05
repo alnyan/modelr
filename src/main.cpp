@@ -2,9 +2,7 @@
 #include <math.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include "render/model.h"
-#include "render/shader.h"
-#include "render/texture.h"
+//#include "render/shader.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
@@ -15,7 +13,7 @@
 //
 
 static GLFWwindow *s_window;
-static Shader *s_shader;
+//static Shader *s_shader;
 
 static constexpr float s_moveSpeed = 5;
 static double s_walkStart = 0;
@@ -56,7 +54,7 @@ static GLuint s_screenShaderID;
 //
 
 int init(void) {
-    s_scene = new Scene(s_shader, s_projectionMatrix);
+    s_scene = new Scene(s_projectionMatrix);
 
     s_player = new GameObject();
     s_camera = new FPSCamera(s_player);
@@ -69,23 +67,6 @@ int init(void) {
 #ifdef RENDER_TO_TEXTURE
     s_scene->setDestinationBuffer(s_sceneBuffer);
 #endif
-
-    // Test model
-    auto model = Model::loadObj("model.obj");
-    if (!model) {
-        std::cerr << "Failed to load models" << std::endl;
-        return -1;
-    }
-
-    for (int i = 0; i < 100; ++i) {
-        for (int j = 0; j < 10; ++j) {
-            //auto obj = new MeshObject({ glm::vec3(0), model });
-            auto obj = new MeshObject(model);
-            obj->setPosition({ i * 2, 0, j * 2 });
-            obj->setRenderMode(s_renderMode);
-            s_scene->add(obj);
-        }
-    }
 
     return 0;
 }
@@ -101,11 +82,11 @@ int setup_gl(void) {
     }
 #endif
 
-    s_shader = Shader::loadShader("shader.vert", "shader.frag");
-    if (!s_shader) {
-        std::cerr << "Failed to load shaders" << std::endl;
-        return -1;
-    }
+    //s_shader = Shader::loadShader("shader.vert", "shader.frag");
+    //if (!s_shader) {
+        //std::cerr << "Failed to load shaders" << std::endl;
+        //return -1;
+    //}
     s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
 
 #ifdef RENDER_TO_TEXTURE
@@ -177,8 +158,8 @@ void render(void) {
     s_player->translate(delta);
 
     s_scene->render();
-    Model::unbindAll();
-    Material::unbindAll();
+    //Model::unbindAll();
+    //Material::unbindAll();
 
 #ifdef RENDER_TO_TEXTURE
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
