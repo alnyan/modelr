@@ -1,5 +1,7 @@
 #pragma once
+#include <GL/glew.h>
 #include <glm/glm.hpp>
+#include <vector>
 
 // Single VAO which contains all model meshes
 //   Models are specified by their mesh offset
@@ -32,15 +34,16 @@ public:
     void texCoord(glm::vec2 t);
 
     /**
-     * @brief Shortcut for adding normals/texCoords/vertices for each of 3 vertices.
+     * @brief Returns new shape offset
      */
-    void triangle(glm::vec3 va, glm::vec2 ta, glm::vec3 na,
-                  glm::vec3 vb, glm::vec2 tb, glm::vec3 nb,
-                  glm::vec3 vc, glm::vec2 tc, glm::vec3 nc);
+    GLuint beginShape();
 
 private:
     std::vector<MeshVertexAttrib> m_vertexData;
 
-    GLint m_vertexCount;
+    glm::vec3 m_normal;
+    glm::vec2 m_texCoord;
+    GLuint m_geometryBufferID;
+    GLint m_vertexCount = 0;
     GLuint m_arrayID;
 };

@@ -2,13 +2,15 @@
 #include <math.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-//#include "render/shader.h"
+#include "render/shader.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
 #include "scene.h"
 #include "fpscamera.h"
+
 #include "render/meshobject.h"
+#include "render/wavefront.h"
 
 //
 
@@ -30,6 +32,11 @@ static double s_frameTimeSum = 0;
 static GLuint s_renderMode = GL_TRIANGLES;
 
 static glm::mat4 s_projectionMatrix;
+
+static GLuint s_sceneShaderID;
+static GLuint s_allGeometryArrayID;
+static MeshBuilder *s_allGeometryBuilder;
+static GLuint s_model;
 
 static Scene *s_scene;
 static GameObject *s_player;
@@ -53,13 +60,37 @@ static GLuint s_screenShaderID;
 
 //
 
+int loadData(void) {
+    std::cout << "Loading data" << std::endl;
+
+    if (!Shader::loadProgram(s_sceneShaderID, 2, GL_VERTEX_SHADER, "shader.vert", GL_FRAGMENT_SHADER, "shader.frag")) {
+        std::cerr << "Failed to load shaders" << std::endl;
+        return -1;
+    }
+
+    glGenVertexArrays(1, &s_allGeometryArrayID);
+    s_allGeometryBuilder = new MeshBuilder(s_allGeometryArrayID);
+    s_allGeometryBuilder->begin();
+
+    GLuint mat;
+    if (!Wavefront::loadObj(s_model, mat, s_allGeometryBuilder, "model.obj")) {
+        std::cerr << "Failed to load model" << std::endl;
+        return -1;
+    }
+
+    s_allGeometryBuilder->commit();
+
+    std::cout << "Loading complete" << std::endl;
+    return 0;
+}
+
 int init(void) {
     s_scene = new Scene(s_projectionMatrix);
 
     s_player = new GameObject();
     s_camera = new FPSCamera(s_player);
 
-    s_player->setPosition({ 10, 2, 0 });
+    s_player->setPosition({ 0, 0, 0 });
     s_camera->setRotation({ 0 * 3.14 / 180, -180 * 3.14 / 180, 0 });
 
     s_scene->add(s_player);
@@ -157,7 +188,26 @@ void render(void) {
 
     s_player->translate(delta);
 
+    glUseProgram(s_sceneShaderID);
     s_scene->render();
+
+    // Render test model
+    auto l = glGetUniformLocation(s_sceneShaderID, "mModelMatrix");
+    glm::mat4 modelMatrix(1);
+    glUniformMatrix4fv(l, 1, GL_FALSE, &modelMatrix[0][0]);
+
+    glBindVertexArray(s_allGeometryArrayID);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    glDisableVertexAttribArray(2);
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+
     //Model::unbindAll();
     //Material::unbindAll();
 
@@ -289,7 +339,7 @@ int main() {
 
     glfwSwapInterval(1);
 
-    if (setup_gl() != 0 || init() != 0) {
+    if (setup_gl() != 0 || loadData() != 0 || init() != 0) {
         glfwTerminate();
         return -1;
     }
