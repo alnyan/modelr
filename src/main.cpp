@@ -12,6 +12,8 @@
 #include "render/meshobject.h"
 #include "render/wavefront.h"
 
+#include "config.h"
+
 //
 
 static GLFWwindow *s_window;
@@ -37,11 +39,16 @@ typedef struct {
     GLuint count, instanceCount, first, baseInstance;
 } DrawArraysIndirectCommand;
 
+struct MeshAttrib {
+    int material;
+};
+
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
-static GLuint s_modelMatrixBufferID, s_indirectCommandBufferID;
+static GLuint s_modelMatrixBufferID, s_meshAttribBufferID, s_indirectCommandBufferID;
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
+static std::vector<MeshAttrib> s_meshAttribs;
 
 static double s_transferTime, s_drawCallTime;
 
@@ -109,9 +116,6 @@ int init(void) {
 
     s_scene->add(s_player);
     s_scene->setActiveCamera(s_camera);
-#ifdef RENDER_TO_TEXTURE
-    s_scene->setDestinationBuffer(s_sceneBuffer);
-#endif
 
     // Setup drawcalls
 
@@ -119,6 +123,7 @@ int init(void) {
         for (int j = -5; j < 5; ++j) {
             s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
             s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
+            s_meshAttribs.push_back({ 0 });
         }
     }
 
@@ -127,6 +132,7 @@ int init(void) {
 
     glNamedBufferData(s_indirectCommandBufferID, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
     glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_STATIC_DRAW);
+    glNamedBufferData(s_meshAttribBufferID, s_meshAttribs.size() * sizeof(glm::mat4), &s_meshAttribs[0], GL_STATIC_DRAW);
 
     return 0;
 }
@@ -186,12 +192,13 @@ int setup_gl(void) {
 
     glGenBuffers(1, &s_modelMatrixBufferID);
     glGenBuffers(1, &s_indirectCommandBufferID);
+    glGenBuffers(1, &s_meshAttribBufferID);
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
     glBufferData(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, s_modelMatrixBufferID);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, s_modelMatrixBufferID);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, s_meshAttribBufferID);
 
     s_lastTime = glfwGetTime();
 
@@ -229,9 +236,8 @@ void render(void) {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
-    glEnableVertexAttribArray(5); // Model matrices
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, s_modelMatrixBufferID);
+    //glBindBuffer(GL_SHADER_STORAGE_BUFFER, s_modelMatrixBufferID);
     //glBufferData(GL_SHADER_STORAGE_BUFFER, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_DYNAMIC_DRAW);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
 
@@ -248,7 +254,6 @@ void render(void) {
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(2);
-    glDisableVertexAttribArray(5);
     glBindVertexArray(0);
 
     glUseProgram(0);

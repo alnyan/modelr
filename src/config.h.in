@@ -1,0 +1,3 @@
+#pragma once
+
+#cmakedefine RENDER_TO_TEXTURE

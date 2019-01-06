@@ -23,8 +23,9 @@ set(SOURCES src/main.cpp
             src/res/assets.cpp
             src/render/meshobject.cpp
             src/fpscamera.cpp)
+configure_file(src/config.h.in ${CMAKE_BINARY_DIR}/config.h)
 
-include_directories(${INCLUDE_DIRS})
+include_directories(${INCLUDE_DIRS} ${CMAKE_BINARY_DIR})
 
 ####
 

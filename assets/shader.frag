@@ -7,11 +7,11 @@ in vec3 mSourceTangent;
 in vec3 mSourceBitangent;
 
 // Manual padding to conform to std140 format (items are padded to 16 bytes)
-struct MaterialSmallOpts {
-    float m_Ns;
-    int m_Matopt;
-    int m_pad0, m_pad1;
-};
+//struct MaterialSmallOpts {
+    //float m_Ns;
+    //int m_Matopt;
+    //int m_pad0, m_pad1;
+//};
 
 layout(std140,binding=0) uniform mSceneParams {
     mat4 mProjectionMatrix;
@@ -20,15 +20,19 @@ layout(std140,binding=0) uniform mSceneParams {
     vec4 mCameraDestination;
 };
 
-layout(std140,binding=1) uniform mMaterialParams {
-    vec4 m_Ka;
-    vec4 m_Kd;
-    vec4 m_Ks;
-    MaterialSmallOpts m_smallopts;
-};
+//layout(std140,binding=1) uniform mMaterialParams {
+    //vec4 m_Ka;
+    //vec4 m_Kd;
+    //vec4 m_Ks;
+    //MaterialSmallOpts m_smallopts;
+//};
 
 layout(std430,binding=1) buffer mModelParams {
     mat4 mModelMatrices[];
+};
+
+layout(std430,binding=2) buffer mMeshAttribs {
+    int mMeshMaterials[];
 };
 
 layout(location = 0) out vec3 color;
@@ -41,8 +45,20 @@ const float diffuseIntensity = 0.5f;
 const vec3 fogColor = vec3(0, 0.25, 0.25);
 const float fogDensity = 0.05;
 
-uniform sampler2D m_map_Kd;
-uniform sampler2D m_map_Bump;
+// TODO: upload this from CPU, not hardcode
+struct MeshMaterial {
+    vec3 m_Kd;
+    vec3 m_Ka;
+    vec3 m_Ks;
+    int m_Matopt;
+};
+
+const MeshMaterial mMaterials[1] = {
+    { vec3(1, 0, 0), vec3(0.1, 0.1, 0.1), vec3(1, 1, 1), 0 }
+};
+
+//uniform sampler2D m_map_Kd;
+//uniform sampler2D m_map_Bump;
 
 // Diffuse color function
 vec3 funKd(vec3 kd, vec3 n, vec3 lightVec, float lightDist) {
@@ -59,34 +75,35 @@ vec3 funKa(vec3 kd, vec3 ka) {
 vec3 funKs(vec3 lightColor, vec3 normal, vec3 lightVec, vec3 eyeVec, float lightDist, float eyeDist) {
     vec3 lightReflect = reflect(-lightVec, normal);
     float cosAlpha = clamp(dot(eyeVec, lightReflect), 0, 1);
-    float specInt = pow(cosAlpha, m_smallopts.m_Ns) / pow(lightDist, 2);
+    float specInt = pow(cosAlpha, 4) / pow(lightDist, 2);
     return lightColor * specInt;
 }
 
 void main() {
-    vec3 diffuseColor;
-    if ((m_smallopts.m_Matopt & 1) != 0) {
-        diffuseColor = m_Kd.rgb * texture(m_map_Kd, mSourceTexCoord).rgb;
-    } else {
-        diffuseColor = m_Kd.rgb;
-        diffuseColor = vec3(1, 0, 0);
-    }
+    MeshMaterial mat = mMaterials[mMeshMaterials[0]];
+
+    vec3 diffuseColor = mat.m_Kd;
+    //if ((m_smallopts.m_Matopt & 1) != 0) {
+        //diffuseColor = m_Kd.rgb * texture(m_map_Kd, mSourceTexCoord).rgb;
+    //} else {
+        //diffuseColor = m_Kd.rgb;
+    //}
 
     // Get tangent-basis matrix
     float normalBumpiness = 1;
     mat3 matTBN;
     vec3 mapNormal;
-    if ((m_smallopts.m_Matopt & 2) != 0) {
-        //mapNormal = (normalBumpiness * 2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(normalBumpiness);
-        //matTBN = transpose(mat3(
-            //normalize(mSourceTangent),
-            //normalize(mSourceBitangent),
-            //normalize(mapNormal)
-        //));
+    //if ((m_smallopts.m_Matopt & 2) != 0) {
+        ////mapNormal = (normalBumpiness * 2 * texture(m_map_Bump, mSourceTexCoord).rgb) - vec3(normalBumpiness);
+        ////matTBN = transpose(mat3(
+            ////normalize(mSourceTangent),
+            ////normalize(mSourceBitangent),
+            ////normalize(mapNormal)
+        ////));
+        //mapNormal = mSourceNormal;
+    //} else {
         mapNormal = mSourceNormal;
-    } else {
-        mapNormal = mSourceNormal;
-    }
+    //}
 
     // Light params
     vec3 lightVec = normalize(lightPos - mSourceVertex);
@@ -101,7 +118,7 @@ void main() {
 
     vec3 res_color = res_Kd
                    //+ res_Ks
-                   + m_Kd.rgb * 0.1;
+                   + mat.m_Kd.rgb * 0.1;
 
     float d = length(mSourceVertex - mCameraPosition.xyz);
     float fogFactor = 1 / exp(fogDensity * d);
