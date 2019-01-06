@@ -48,7 +48,7 @@ static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
 static GLuint s_modelMatrixBufferID, s_meshAttribBufferID, s_indirectCommandBufferID;
 static GLuint s_textureHandleBufferID;
-static GLuint s_textureIDs[1];
+static GLuint s_textureIDs[2];
 static GLuint64 s_textureHandles[256];
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
@@ -81,6 +81,22 @@ static GLuint s_screenShaderID;
 
 //
 
+int loadTexture(GLuint id, const char *path) {
+    unsigned int w, h;
+    std::vector<unsigned char> data;
+    if (lodepng::decode(data, w, h, path) != 0) {
+        std::cerr << "Failed to load textures" << std::endl;
+        return -1;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[0]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    return 0;
+}
+
 int loadData(void) {
     std::cout << "Loading data" << std::endl;
 
@@ -96,24 +112,17 @@ int loadData(void) {
     }
 #endif
 
-    unsigned int w, h;
-    std::vector<unsigned char> data;
-    if (lodepng::decode(data, w, h, "assets/texture.png") != 0) {
-        std::cerr << "Failed to load textures" << std::endl;
-        return -1;
-    }
-
     glGenTextures(sizeof(s_textureIDs) / sizeof(s_textureIDs[0]), s_textureIDs);
 
+    const char *textures[] = {
+        "assets/texture.png",
+        "assets/normal.png"
+    };
+
     for (int i = 0; i < sizeof(s_textureIDs) / sizeof(s_textureIDs[0]); ++i) {
-        glBindTexture(GL_TEXTURE_2D, s_textureIDs[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[0]);
-        if (glGetError()) {
-            std::cerr << "Failed to upload textures" << std::endl;
+        if (loadTexture(s_textureIDs[i], textures[i]) != 0) {
             return -1;
         }
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glBindTexture(GL_TEXTURE_2D, 0);
         s_textureHandles[i] = glGetTextureHandleARB(s_textureIDs[i]);
         if (glGetError()) {
@@ -133,10 +142,10 @@ int loadData(void) {
         std::cerr << "Failed to load model" << std::endl;
         return -1;
     }
-    if (!Wavefront::loadObj(&s_models[1], mat, s_allGeometryBuilder, "terrain.obj")) {
-        std::cerr << "Failed to load model" << std::endl;
-        return -1;
-    }
+    //if (!Wavefront::loadObj(&s_models[1], mat, s_allGeometryBuilder, "terrain.obj")) {
+        //std::cerr << "Failed to load model" << std::endl;
+        //return -1;
+    //}
 
     s_allGeometryBuilder->commit();
 
@@ -273,6 +282,8 @@ void render(void) {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+    glEnableVertexAttribArray(4);
 
     //glBindBuffer(GL_SHADER_STORAGE_BUFFER, s_modelMatrixBufferID);
     //glBufferData(GL_SHADER_STORAGE_BUFFER, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_DYNAMIC_DRAW);
@@ -291,6 +302,8 @@ void render(void) {
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(2);
+    glDisableVertexAttribArray(3);
+    glDisableVertexAttribArray(4);
     glBindVertexArray(0);
 
     glUseProgram(0);

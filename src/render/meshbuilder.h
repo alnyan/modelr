@@ -51,5 +51,6 @@ private:
     glm::vec2 m_texCoord;
     GLuint m_geometryBufferID;
     GLint m_vertexCount = 0;
+    GLint m_counter = 0;
     GLuint m_arrayID;
 };
