@@ -13,16 +13,16 @@ Scene::Scene(glm::mat4 p) {
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_sceneUniformBufferID);
 }
 
-#ifdef RENDER_TO_TEXTURE
-void Scene::setViewport(int w, int h) {
-    m_width = w;
-    m_height = h;
-}
+//#ifdef RENDER_TO_TEXTURE
+//void Scene::setViewport(int w, int h) {
+    //m_width = w;
+    //m_height = h;
+//}
 
-void Scene::setDestinationBuffer(GLuint fbo) {
-    m_destinationBuffer = fbo;
-}
-#endif
+//void Scene::setDestinationBuffer(GLuint fbo) {
+    //m_destinationBuffer = fbo;
+//}
+//#endif
 
 void Scene::setProjectionMatrix(glm::mat4 m) {
     m_sceneUniformData.m_projectionMatrix = m;
@@ -38,11 +38,11 @@ void Scene::render() {
         return;
     }
 
-#ifdef RENDER_TO_TEXTURE
-    glBindFramebuffer(GL_FRAMEBUFFER, m_destinationBuffer);
-    glViewport(0, 0, m_width, m_height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-#endif
+//#ifdef RENDER_TO_TEXTURE
+    //glBindFramebuffer(GL_FRAMEBUFFER, m_destinationBuffer);
+    //glViewport(0, 0, m_width, m_height);
+    //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+//#endif
 
     //m_shader->apply();
 
@@ -58,9 +58,9 @@ void Scene::render() {
         //o->render();
     //}
 
-#ifdef RENDER_TO_TEXTURE
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-#endif
+//#ifdef RENDER_TO_TEXTURE
+    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+//#endif
 }
 
 void Scene::add(GameObject *o) {

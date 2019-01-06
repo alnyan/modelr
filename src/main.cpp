@@ -8,6 +8,7 @@
 #include "gameobject.h"
 #include "scene.h"
 #include "fpscamera.h"
+#include "res/lodepng.h"
 
 #include "render/meshobject.h"
 #include "render/wavefront.h"
@@ -46,6 +47,9 @@ struct MeshAttrib {
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
 static GLuint s_modelMatrixBufferID, s_meshAttribBufferID, s_indirectCommandBufferID;
+static GLuint s_textureHandleBufferID;
+static GLuint s_textureIDs[1];
+static GLuint64 s_textureHandles[256];
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
 static std::vector<MeshAttrib> s_meshAttribs;
@@ -85,6 +89,41 @@ int loadData(void) {
         return -1;
     }
 
+#ifdef RENDER_TO_TEXTURE
+    if (!Shader::loadProgram(s_screenShaderID, 2, GL_VERTEX_SHADER, "screen.vert", GL_FRAGMENT_SHADER, "screen.frag")) {
+        std::cerr << "Failed to load screen shader" << std::endl;
+        return -1;
+    }
+#endif
+
+    unsigned int w, h;
+    std::vector<unsigned char> data;
+    if (lodepng::decode(data, w, h, "assets/texture.png") != 0) {
+        std::cerr << "Failed to load textures" << std::endl;
+        return -1;
+    }
+
+    glGenTextures(sizeof(s_textureIDs) / sizeof(s_textureIDs[0]), s_textureIDs);
+
+    for (int i = 0; i < sizeof(s_textureIDs) / sizeof(s_textureIDs[0]); ++i) {
+        glBindTexture(GL_TEXTURE_2D, s_textureIDs[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[0]);
+        if (glGetError()) {
+            std::cerr << "Failed to upload textures" << std::endl;
+            return -1;
+        }
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        s_textureHandles[i] = glGetTextureHandleARB(s_textureIDs[i]);
+        if (glGetError()) {
+            std::cerr << "Failed to get texture handle" << std::endl;
+            return -1;
+        }
+        glMakeTextureHandleResidentARB(s_textureHandles[i]);
+    }
+    glNamedBufferData(s_textureHandleBufferID, sizeof(s_textureHandles), s_textureHandles, GL_STATIC_DRAW);
+
     glGenVertexArrays(1, &s_allGeometryArrayID);
     s_allGeometryBuilder = new MeshBuilder(s_allGeometryArrayID);
     s_allGeometryBuilder->begin();
@@ -119,8 +158,8 @@ int init(void) {
 
     // Setup drawcalls
 
-    for (int i = -5; i < 5; ++i) {
-        for (int j = -5; j < 5; ++j) {
+    for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
             s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
             s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
             s_meshAttribs.push_back({ 0 });
@@ -140,13 +179,6 @@ int init(void) {
 int setup_gl(void) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-
-#ifdef RENDER_TO_TEXTURE
-    if (!Shader::loadProgram("screen.vert", "screen.frag", s_screenShaderID)) {
-        std::cerr << "Failed to load screen shader" << std::endl;
-        return -1;
-    }
-#endif
 
     s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
 
@@ -193,12 +225,15 @@ int setup_gl(void) {
     glGenBuffers(1, &s_modelMatrixBufferID);
     glGenBuffers(1, &s_indirectCommandBufferID);
     glGenBuffers(1, &s_meshAttribBufferID);
+    glGenBuffers(1, &s_textureHandleBufferID);
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
     glBufferData(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, s_modelMatrixBufferID);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, s_meshAttribBufferID);
+
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, s_textureHandleBufferID);
 
     s_lastTime = glfwGetTime();
 
@@ -213,6 +248,8 @@ void render(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 #ifdef RENDER_TO_TEXTURE
     glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 #endif
 
     // Move camera
@@ -296,7 +333,7 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    s_scene->setViewport(m_width, m_height);
+    //s_scene->setViewport(m_width, m_height);
 #endif
 
     s_scene->setProjectionMatrix(glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f));
@@ -384,6 +421,11 @@ int main() {
     glewExperimental = true;
     if (glewInit() != 0) {
         glfwTerminate();
+        return -2;
+    }
+
+    if (!GLEW_ARB_bindless_texture) {
+        std::cerr << "Bindless textures are unsupported" << std::endl;
         return -2;
     }
 
