@@ -49,7 +49,7 @@ static GLuint s_allGeometryArrayID;
 static GLuint s_modelMatrixBufferID, s_meshAttribBufferID, s_indirectCommandBufferID;
 static GLuint s_textureHandleBufferID;
 static GLuint s_textureIDs[2];
-static GLuint64 s_textureHandles[256];
+static GLuint64 s_textureHandles[512];
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
 static std::vector<MeshAttrib> s_meshAttribs;
@@ -91,8 +91,9 @@ int loadTexture(GLuint id, const char *path) {
 
     glBindTexture(GL_TEXTURE_2D, id);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[0]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     return 0;
 }
@@ -116,20 +117,25 @@ int loadData(void) {
 
     const char *textures[] = {
         "assets/texture.png",
-        "assets/normal.png"
+        "assets/normal.png",
     };
 
     for (int i = 0; i < sizeof(s_textureIDs) / sizeof(s_textureIDs[0]); ++i) {
         if (loadTexture(s_textureIDs[i], textures[i]) != 0) {
             return -1;
         }
-        glBindTexture(GL_TEXTURE_2D, 0);
-        s_textureHandles[i] = glGetTextureHandleARB(s_textureIDs[i]);
+    }
+    for (int i = 0; i < sizeof(s_textureIDs) / sizeof(s_textureIDs[0]); ++i) {
+        s_textureHandles[i * 2] = glGetTextureHandleARB(s_textureIDs[i]);
         if (glGetError()) {
             std::cerr << "Failed to get texture handle" << std::endl;
             return -1;
         }
-        glMakeTextureHandleResidentARB(s_textureHandles[i]);
+        glMakeTextureHandleResidentARB(s_textureHandles[i * 2]);
+        if (glGetError()) {
+            std::cerr << "Failed to get texture handle" << std::endl;
+            return -1;
+        }
     }
     glNamedBufferData(s_textureHandleBufferID, sizeof(s_textureHandles), s_textureHandles, GL_STATIC_DRAW);
 
@@ -142,11 +148,6 @@ int loadData(void) {
         std::cerr << "Failed to load model" << std::endl;
         return -1;
     }
-    //if (!Wavefront::loadObj(&s_models[1], mat, s_allGeometryBuilder, "terrain.obj")) {
-        //std::cerr << "Failed to load model" << std::endl;
-        //return -1;
-    //}
-
     s_allGeometryBuilder->commit();
 
     std::cout << "Loading complete" << std::endl;
@@ -166,17 +167,13 @@ int init(void) {
     s_scene->setActiveCamera(s_camera);
 
     // Setup drawcalls
-
-    for (int i = -1; i <= 1; ++i) {
-        for (int j = -1; j <= 1; ++j) {
+    for (int i = -6; i <= 6; ++i) {
+        for (int j = -6; j <= 6; ++j) {
             s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
             s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
             s_meshAttribs.push_back({ 0 });
         }
     }
-
-    //s_indirectCommands.push_back({ s_models[1].size, 1, s_models[1].begin, 0 });
-    //s_modelMatrices.push_back(glm::mat4(1));
 
     glNamedBufferData(s_indirectCommandBufferID, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
     glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_STATIC_DRAW);
@@ -317,6 +314,8 @@ void render(void) {
     glUseProgram(s_screenShaderID);
     auto l = glGetUniformLocation(s_screenShaderID, "mDepthTexture");
     glUniform1i(l, 1);
+    l = glGetUniformLocation(s_screenShaderID, "mTime");
+    glUniform1f(l, (GLfloat) t);
     glBindTextures(0, 2, s_sceneTextures);
 
     glBindVertexArray(s_screenArrayID);

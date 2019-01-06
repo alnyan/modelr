@@ -60,19 +60,18 @@ const MeshMaterial mMaterials[1] = {
 const LightParams mLights[2] = {
     {
         vec3(3, 2, 3),
-        vec3(1, 0, 0),
-        10
+        vec3(0.5, 1, 1),
+        3
     },
     {
         vec3(-3, 2, -3),
-        vec3(0, 1, 0),
+        vec3(1, 0.7, 0.5),
         10
     }
 };
 
 // Hardcoded params (yet)
-const float ambientIntensity = 0.1f;
-
+const float ambientIntensity = 0.2f;
 
 const vec3 fogColor = vec3(0, 0.25, 0.25);
 const float fogDensity = 0.05;
@@ -80,27 +79,22 @@ const float fogDensity = 0.05;
 ////
 
 vec3 funDiffuse(vec3 inKd,
-                vec3 lightPos,
+                vec3 lightDir,
+                float lightDist,
                 vec3 lightColor,
                 float lightIntensity,
-                vec3 pos,
                 vec3 normal) {
-    vec3 lightDir = normalize(lightPos - pos);
-    float lightDist = length(lightPos - pos);
-
     float cosTheta = clamp(dot(normal, lightDir), 0, 1);
 
     return lightIntensity * lightColor * cosTheta * inKd / pow(lightDist, 2);
 }
 
-vec3 funSpecular(vec3 lightPos,
+vec3 funSpecular(vec3 lightDir,
+                 float lightDist,
                  vec3 lightColor,
                  float lightIntensity,
-                 vec3 pos,
                  vec3 normal,
                  vec3 eyeDir) {
-    vec3 lightDir = normalize(lightPos - pos);
-    float lightDist = length(lightPos - pos);
     vec3 rayReflect = normalize(reflect(-lightDir, normal));
 
     float cosAlpha = clamp(dot(rayReflect, eyeDir), 0, 1);
@@ -112,16 +106,21 @@ vec3 funSpecular(vec3 lightPos,
 
 void main() {
     MeshMaterial mat = mMaterials[mMeshMaterials[0]];
-    vec3 baseKd;
+    vec3 baseKd = texture(mTextures[0], mSourceTexCoord).rgb;
+    vec3 mapNormal = normalize(texture(mTextures[1], mSourceTexCoord).rgb * 2.0 - vec3(1.0));
 
-    baseKd = texture(mTextures[0], mSourceTexCoord).rgb;
+    mat3 matTBN = transpose(mat3(
+        normalize(mSourceTangent),
+        normalize(mSourceBitangent),
+        normalize(mSourceNormal)
+    ));
 
-    color = vec3(0, 0, 0); // TODO: ambient
-
-    vec3 eyeDir = normalize(vec3(mCameraPosition - mCameraDestination));
+    color = baseKd * ambientIntensity; // TODO: ambient
+    vec3 eyeDir = normalize(matTBN * (-(mCameraDestination - mCameraPosition)).xyz);
 
     for (int i = 0; i < mLights.length(); ++i) {
-        color += funDiffuse(baseKd, mLights[i].mLightPos, mLights[i].mLightColor, mLights[i].mLightIntensity, mSourceVertex, mSourceNormal);
-        color += funSpecular(mLights[i].mLightPos, mLights[i].mLightColor, mLights[i].mLightIntensity, mSourceVertex, mSourceNormal, eyeDir);
+        vec3 lightDir = matTBN * (mLights[i].mLightPos - mSourceVertex);
+        color += funDiffuse(baseKd, normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal);
+        color += funSpecular(normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal, eyeDir);
     }
 }

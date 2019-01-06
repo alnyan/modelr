@@ -1,0 +1,23 @@
+Real-world based light colors, RGB
+Credit: https://www.reddit.com/r/spaceengineers/comments/3e0k38/rgb_values_for_various_types_of_realworld_lights
+
+    name, R 0-255, G 0-255, B 0-255
+    Candle 255, 147, 41
+    40W Tungsten 255, 197, 143
+    100W Tungsten 255, 214, 170
+    Halogen 255, 241, 224
+    Carbon Arc 255, 250, 244
+    High Noon Sun 255, 255, 251
+    Direct Sunlight 255, 255, 255
+    Overcast Sky 201, 226, 255
+    Clear Blue Sky 64, 156, 255
+    Warm Fluorescent 255, 244, 229
+    Standard Fluorescent 244, 255, 250
+    Cool White Fluorescent 212, 235, 255
+    Full Spectrum Fluorescent 255, 244, 242
+    Grow Light Fluorescent 255, 239, 247
+    Black Light Fluorescent 167, 0, 255
+    Mercury Vapor 216, 247, 255
+    Sodium Vapor 255, 209, 178
+    Metal Halide 242, 252, 255
+    High Pressure Sodium 255, 183, 76
