@@ -17,20 +17,17 @@ Features
 * Materials
     * Diffuse maps
     * Normal maps
+* Phong lighting model
 
 
 Planned features
 ----------------
 
 
-* !!! Material mesh sorting
 * !!! Transparent material support
 * !!! Mesh vertex attribute indexing
-* Multiple textures per material
-* Classes for different mesh types
 * View frustum culling (GLSL-side, if possible)
 * SSAO
-* Dynamic lights
 * Occlusion culling, if possible
 * Dynamic terrain loading/rendering, preferrably from heightmap
 * More optimizations
