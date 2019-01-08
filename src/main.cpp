@@ -302,68 +302,7 @@ int setup_gl(void) {
     return 0;
 }
 
-void render(void) {
-    auto t = glfwGetTime();
-    auto dt = t - s_lastTime;
-    s_lastTime = t;
-
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-#ifdef RENDER_TO_TEXTURE
-    glBindTexture(GL_TEXTURE_2D, 0);
-#endif
-
-    // Move camera
-    //double wt = t - s_walkStart;
-    //double bobf = 0.05 * sin(wt * 10) * s_walk;
-    //double ry = s_camera->getWorldRotation().y;
-    //glm::vec3 delta(
-        //s_moveSpeed * (sin(ry) * dt * s_walk - sin(ry + M_PI / 2) * dt * s_strafe),
-        //s_moveSpeed * s_fly * dt,
-        //-s_moveSpeed * (cos(ry) * dt * s_walk - cos(ry + M_PI / 2) * dt * s_strafe)
-    //);
-
-    //s_player->translate(delta);
-    //if (s_walk) {
-    s_sceneUniformData.m_cameraPosition += glm::vec4(s_walk * 0.01, s_fly * 0.01, s_strafe * 0.01, 0);
-    //auto rpos = s_sceneUniformData.m_cameraPosition
-    //}
-
-    glBindVertexArray(s_allGeometryArrayID);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-    glEnableVertexAttribArray(3);
-    glEnableVertexAttribArray(4);
-
-    // BEGIN RENDER
-    // BLAST 1: LIGHT'S ORTHO
-    auto t0 = glfwGetTime();
-    glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(s_depthShaderID);
-
-    // UPDATE SCENE PARAMS HERE
-    //s_sceneUniformData.m_cameraPosition = glm::vec4(10, 10, 10, 1);
-    s_sceneUniformData.m_cameraDestination = glm::vec4(0, 0, 0, 1);
-    s_sceneUniformData.m_cameraMatrix = glm::lookAt(
-        glm::vec3(1, 1, 1),
-        glm::vec3(0, 0, 0),
-        glm::vec3(0, 1, 0)
-    );
-    s_sceneUniformData.m_projectionMatrix = s_light0ProjectionMatrix;
-    glNamedBufferSubData(s_sceneUniformBufferID, 0, sizeof(SceneUniformData), &s_sceneUniformData);
-    //glNamedBufferSubData(s_sceneUniformBufferID, sizeof(glm::mat4), sizeof(SceneUniformData) - sizeof(glm::mat4),
-        //(GLvoid *) ((uintptr_t) &s_sceneUniformData + sizeof(glm::mat4)));
-
-    auto t1 = glfwGetTime();
-    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
-    auto t2 = glfwGetTime();
-
-    s_transferTime += t1 - t0;
-    s_drawCallTime += t2 - t1;
-    // BLAST 2: PLAYER'S CAMERA
-    t0 = glfwGetTime();
+void renderScene(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(s_sceneShaderID);
@@ -388,6 +327,69 @@ void render(void) {
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void renderLight0(void) {
+    glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(s_depthShaderID);
+
+    s_sceneUniformData.m_cameraDestination = glm::vec4(0, 0, 0, 1);
+    s_sceneUniformData.m_cameraMatrix = glm::lookAt(
+        glm::vec3(1, 1, 1),
+        glm::vec3(0, 0, 0),
+        glm::vec3(0, 1, 0)
+    );
+    s_sceneUniformData.m_projectionMatrix = s_light0ProjectionMatrix;
+    glNamedBufferSubData(s_sceneUniformBufferID, 0, sizeof(SceneUniformData), &s_sceneUniformData);
+
+    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
+}
+
+void renderScreen(void) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, m_width, m_height);
+    glUseProgram(s_screenShaderID);
+    auto l = glGetUniformLocation(s_screenShaderID, "mDepthTexture");
+    glUniform1i(l, 1);
+    l = glGetUniformLocation(s_screenShaderID, "mScreenDimensions");
+    glm::vec4 screenDimensions(m_width, m_height, 0.1f, 100.0f);
+    glUniform4f(l, screenDimensions.x, screenDimensions.y, screenDimensions.z, screenDimensions.w);
+
+    glBindTextures(0, 2, s_sceneTextures);
+
+    glBindVertexArray(s_screenArrayID);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    glBindVertexArray(0);
+}
+
+void render(void) {
+    auto t = glfwGetTime();
+    s_lastTime = t;
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    s_sceneUniformData.m_cameraPosition += glm::vec4(s_walk * 0.01, s_fly * 0.01, s_strafe * 0.01, 0);
+
+    glBindVertexArray(s_allGeometryArrayID);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+    glEnableVertexAttribArray(4);
+
+    // BEGIN RENDER
+    // BLAST 1: LIGHT'S ORTHO
+    renderLight0();
+
+    // BLAST 2: PLAYER'S CAMERA
+    renderScene();
 
     // END RENDER
 
@@ -402,34 +404,7 @@ void render(void) {
 
     glUseProgram(0);
 
-    //Model::unbindAll();
-    //Material::unbindAll();
-
-#ifdef RENDER_TO_TEXTURE
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, m_width, m_height);
-    glUseProgram(s_screenShaderID);
-    auto l = glGetUniformLocation(s_screenShaderID, "mDepthTexture");
-    glUniform1i(l, 1);
-    l = glGetUniformLocation(s_screenShaderID, "mTime");
-    glUniform1f(l, (GLfloat) t);
-    l = glGetUniformLocation(s_screenShaderID, "mScreenDimensions");
-    glm::vec4 screenDimensions(m_width, m_height, 0.1f, 100.0f);
-    glUniform4f(l, screenDimensions.x, screenDimensions.y, screenDimensions.z, screenDimensions.w);
-
-    glBindTextures(0, 2, s_sceneTextures);
-    //if ((int) t % 2 == 0) {
-        //glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureID);
-    //}
-
-    glBindVertexArray(s_screenArrayID);
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(1);
-    glBindVertexArray(0);
-#endif
+    renderScreen();
 
     auto r = glfwGetTime();
 
