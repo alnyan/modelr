@@ -6,7 +6,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
-#include "scene.h"
+//#include "scene.h"
 #include "fpscamera.h"
 #include "res/lodepng.h"
 
@@ -39,6 +39,12 @@ static glm::mat4 s_projectionMatrix;
 typedef struct {
     GLuint count, instanceCount, first, baseInstance;
 } DrawArraysIndirectCommand;
+struct SceneUniformData {
+    glm::mat4 m_projectionMatrix;
+    glm::mat4 m_cameraMatrix;
+    glm::vec4 m_cameraPosition;
+    glm::vec4 m_cameraDestination;
+};
 
 struct MeshAttrib {
     int material;
@@ -59,9 +65,11 @@ static double s_transferTime, s_drawCallTime;
 static MeshBuilder *s_allGeometryBuilder;
 static Model s_models[3];
 
-static Scene *s_scene;
-static GameObject *s_player;
-static Camera *s_camera;
+static GLuint s_sceneUniformBufferID;
+static SceneUniformData s_sceneUniformData;
+//static Scene *s_scene;
+//static GameObject *s_player;
+//static Camera *s_camera;
 
 #ifdef RENDER_TO_TEXTURE
 static GLuint s_sceneBuffer;
@@ -155,16 +163,16 @@ int loadData(void) {
 }
 
 int init(void) {
-    s_scene = new Scene(s_projectionMatrix);
+    //s_scene = new Scene(s_projectionMatrix);
 
-    s_player = new GameObject();
-    s_camera = new FPSCamera(s_player);
+    //s_player = new GameObject();
+    //s_camera = new FPSCamera(s_player);
 
-    s_player->setPosition({ 0, 0, 0 });
-    s_camera->setRotation({ 0 * 3.14 / 180, -180 * 3.14 / 180, 0 });
+    //s_player->setPosition({ 0, 0, 0 });
+    //s_camera->setRotation({ 0 * 3.14 / 180, -180 * 3.14 / 180, 0 });
 
-    s_scene->add(s_player);
-    s_scene->setActiveCamera(s_camera);
+    //s_scene->add(s_player);
+    //s_scene->setActiveCamera(s_camera);
 
     // Setup drawcalls
     for (int i = -6; i <= 6; ++i) {
@@ -241,6 +249,16 @@ int setup_gl(void) {
 
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, s_textureHandleBufferID);
 
+    // Scene buffer
+
+    glGenBuffers(1, &s_sceneUniformBufferID);
+
+    glBindBuffer(GL_UNIFORM_BUFFER, s_sceneUniformBufferID);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(s_sceneUniformData), &s_sceneUniformData, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, s_sceneUniformBufferID);
+
     s_lastTime = glfwGetTime();
 
     return 0;
@@ -259,21 +277,18 @@ void render(void) {
 #endif
 
     // Move camera
-    double wt = t - s_walkStart;
-    double bobf = 0.05 * sin(wt * 10) * s_walk;
-    double ry = s_camera->getWorldRotation().y;
-    glm::vec3 delta(
-        s_moveSpeed * (sin(ry) * dt * s_walk - sin(ry + M_PI / 2) * dt * s_strafe),
-        s_moveSpeed * s_fly * dt,
-        -s_moveSpeed * (cos(ry) * dt * s_walk - cos(ry + M_PI / 2) * dt * s_strafe)
-    );
+    //double wt = t - s_walkStart;
+    //double bobf = 0.05 * sin(wt * 10) * s_walk;
+    //double ry = s_camera->getWorldRotation().y;
+    //glm::vec3 delta(
+        //s_moveSpeed * (sin(ry) * dt * s_walk - sin(ry + M_PI / 2) * dt * s_strafe),
+        //s_moveSpeed * s_fly * dt,
+        //-s_moveSpeed * (cos(ry) * dt * s_walk - cos(ry + M_PI / 2) * dt * s_strafe)
+    //);
 
-    s_player->translate(delta);
+    //s_player->translate(delta);
 
     auto t0 = glfwGetTime();
-    glUseProgram(s_sceneShaderID);
-
-    s_scene->render();
 
     glBindVertexArray(s_allGeometryArrayID);
     glEnableVertexAttribArray(0);
@@ -282,17 +297,31 @@ void render(void) {
     glEnableVertexAttribArray(3);
     glEnableVertexAttribArray(4);
 
-    //glBindBuffer(GL_SHADER_STORAGE_BUFFER, s_modelMatrixBufferID);
-    //glBufferData(GL_SHADER_STORAGE_BUFFER, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_DYNAMIC_DRAW);
+    // BEGIN RENDER
+    // BLAST 1
+    glUseProgram(s_sceneShaderID);
+
+    // UPDATE SCENE PARAMS HERE
+    s_sceneUniformData.m_cameraPosition = glm::vec4(10, 10, 10, 1);
+    s_sceneUniformData.m_cameraDestination = glm::vec4(0, 0, 0, 1);
+    s_sceneUniformData.m_cameraMatrix = glm::lookAt(
+        glm::vec3(s_sceneUniformData.m_cameraPosition),
+        glm::vec3(s_sceneUniformData.m_cameraDestination),
+        { 0, 1, 0 }
+    );
+    glNamedBufferSubData(s_sceneUniformBufferID, sizeof(glm::mat4), sizeof(SceneUniformData) - sizeof(glm::mat4),
+        (GLvoid *) ((uintptr_t) &s_sceneUniformData + sizeof(glm::mat4)));
+    //s_scene->render();
+
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
 
     auto t1 = glfwGetTime();
-
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
-
     auto t2 = glfwGetTime();
-    s_transferTime = t1 - t0;
-    s_drawCallTime = t2 - t1;
+
+    s_transferTime += t1 - t0;
+    s_drawCallTime += t2 - t1;
+    // END RENDER
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 
@@ -348,7 +377,8 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     //s_scene->setViewport(m_width, m_height);
 #endif
 
-    s_scene->setProjectionMatrix(glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f));
+    s_sceneUniformData.m_projectionMatrix = glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f);
+    glNamedBufferSubData(s_sceneUniformBufferID, 0, sizeof(glm::mat4), &s_sceneUniformData);
 }
 
 void cursorPosCallback(GLFWwindow *win, double x, double y) {
@@ -357,7 +387,7 @@ void cursorPosCallback(GLFWwindow *win, double x, double y) {
 
     glfwSetCursorPos(win, m_width / 2, m_height / 2);
 
-    s_camera->rotate(glm::vec3(cy * 1.5, cx * 1.5, 0));
+    //s_camera->rotate(glm::vec3(cy * 1.5, cx * 1.5, 0));
 }
 
 void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
@@ -399,9 +429,9 @@ void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
             s_renderMode = GL_TRIANGLES;
         }
 
-        for (auto &obj: s_scene->meshObjects) {
-            obj->setRenderMode(s_renderMode);
-        }
+        //for (auto &obj: s_scene->meshObjects) {
+            //obj->setRenderMode(s_renderMode);
+        //}
     }
 }
 

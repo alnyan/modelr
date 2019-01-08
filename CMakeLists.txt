@@ -19,7 +19,7 @@ set(SOURCES src/main.cpp
             src/res/lodepng.cpp
             #src/render/material.cpp
             src/gameobject.cpp
-            src/scene.cpp
+            #src/scene.cpp
             src/res/assets.cpp
             src/render/meshobject.cpp
             src/fpscamera.cpp)
