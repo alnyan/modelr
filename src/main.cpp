@@ -88,9 +88,9 @@ static GLuint s_screenShaderID;
 #endif
 
 static GLuint s_light0FramebufferID;
-static GLuint s_light0DepthTextureID;
+static GLuint s_light0DepthTextureIDs[4];
 static GLuint s_depthShaderID;
-static glm::mat4 s_light0ProjectionMatrix;
+static glm::mat4 s_light0ProjectionMatrices[4];
 static glm::mat4 s_cameraProjectionMatrix;
 
 //
@@ -253,16 +253,18 @@ int setup_gl(void) {
     }
 #endif
     glGenFramebuffers(1, &s_light0FramebufferID);
-    glGenTextures(1, &s_light0DepthTextureID);
+    glGenTextures(4, s_light0DepthTextureIDs);
 
-    glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 800, 600, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    for (int i = 0; i < 4; ++i) {
+        glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 800, 600, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    }
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureID, 0);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureIDs[0], 0);
     glDrawBuffer(GL_NONE);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -308,10 +310,25 @@ void renderScene(void) {
     glUseProgram(s_sceneShaderID);
 
     {
-        auto l = glGetUniformLocation(s_sceneShaderID, "mDepthMVP");
-        auto depthMVP = s_light0ProjectionMatrix * s_sceneUniformData.m_cameraMatrix;
+        auto l = glGetUniformLocation(s_sceneShaderID, "mDepth0");
+        auto depthMVP = s_light0ProjectionMatrices[0] * s_sceneUniformData.m_cameraMatrix;
         glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
-        glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureID);
+        l = glGetUniformLocation(s_sceneShaderID, "mDepth1");
+        depthMVP = s_light0ProjectionMatrices[1] * s_sceneUniformData.m_cameraMatrix;
+        glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
+        l = glGetUniformLocation(s_sceneShaderID, "mDepth2");
+        depthMVP = s_light0ProjectionMatrices[2] * s_sceneUniformData.m_cameraMatrix;
+        glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
+        l = glGetUniformLocation(s_sceneShaderID, "mDepth3");
+        depthMVP = s_light0ProjectionMatrices[3] * s_sceneUniformData.m_cameraMatrix;
+        glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
+        l = glGetUniformLocation(s_sceneShaderID, "mShadowMap1");
+        glUniform1i(l, 1);
+        l = glGetUniformLocation(s_sceneShaderID, "mShadowMap2");
+        glUniform1i(l, 2);
+        l = glGetUniformLocation(s_sceneShaderID, "mShadowMap3");
+        glUniform1i(l, 3);
+        glBindTextures(0, 4, s_light0DepthTextureIDs);
     }
 
     s_sceneUniformData.m_cameraMatrix = glm::lookAt(
@@ -329,10 +346,9 @@ void renderScene(void) {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void renderLight0(void) {
-    glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(s_depthShaderID);
+void renderLight0(int i) {
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureIDs[i], 0);
+    glClear(GL_DEPTH_BUFFER_BIT);
 
     s_sceneUniformData.m_cameraDestination = glm::vec4(0, 0, 0, 1);
     s_sceneUniformData.m_cameraMatrix = glm::lookAt(
@@ -340,7 +356,7 @@ void renderLight0(void) {
         glm::vec3(0, 0, 0),
         glm::vec3(0, 1, 0)
     );
-    s_sceneUniformData.m_projectionMatrix = s_light0ProjectionMatrix;
+    s_sceneUniformData.m_projectionMatrix = s_light0ProjectionMatrices[i];
     glNamedBufferSubData(s_sceneUniformBufferID, 0, sizeof(SceneUniformData), &s_sceneUniformData);
 
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
@@ -357,6 +373,7 @@ void renderScreen(void) {
     glUniform4f(l, screenDimensions.x, screenDimensions.y, screenDimensions.z, screenDimensions.w);
 
     glBindTextures(0, 2, s_sceneTextures);
+    glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[1]);
 
     glBindVertexArray(s_screenArrayID);
     glEnableVertexAttribArray(0);
@@ -386,7 +403,11 @@ void render(void) {
 
     // BEGIN RENDER
     // BLAST 1: LIGHT'S ORTHO
-    renderLight0();
+    glUseProgram(s_depthShaderID);
+    glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
+    for (int i = 0; i < 4; ++i) {
+        renderLight0(i);
+    }
 
     // BLAST 2: PLAYER'S CAMERA
     renderScene();
@@ -423,13 +444,17 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    for (int i = 0; i < 4; ++i) {
+        glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    }
     glBindTexture(GL_TEXTURE_2D, 0);
     //s_scene->setViewport(m_width, m_height);
 #endif
 
-    s_light0ProjectionMatrix = glm::ortho<float>(-40, 40, -40, 40, -20, 50);
+    for (int i = 0; i < 4; ++i) {
+        s_light0ProjectionMatrices[i] = glm::ortho<float>(-40, 40, -40, 40, -20, 50);
+    }
     s_cameraProjectionMatrix = glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f);
 }
 

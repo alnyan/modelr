@@ -18,19 +18,15 @@ layout(std430,binding=1) buffer mModelParams {
     mat4 mModelMatrices[];
 };
 
-uniform mat4 mDepthMVP;
-
 out vec3 mSourceVertex;
 out vec3 mSourceNormal;
 out vec2 mSourceTexCoord;
 out vec3 mSourceTangent;
 out vec3 mSourceBitangent;
-out vec3 mShadowVertex;
 
 void main() {
     mat4 mModelMatrix = mModelMatrices[gl_DrawIDARB];
 
-    mShadowVertex = (mDepthMVP * mModelMatrix * vec4(mVertex, 1.0)).xyz;
     mSourceVertex = (mModelMatrix * vec4(mVertex, 1.0)).xyz;
     mSourceNormal = mNormal;
     mSourceTexCoord = mTexCoord;

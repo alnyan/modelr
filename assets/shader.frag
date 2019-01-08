@@ -6,9 +6,15 @@ in vec3 mSourceNormal;
 in vec2 mSourceTexCoord;
 in vec3 mSourceTangent;
 in vec3 mSourceBitangent;
-in vec3 mShadowVertex;
 
-uniform sampler2D mShadowMap;
+uniform sampler2D mShadowMap0;
+uniform sampler2D mShadowMap1;
+uniform sampler2D mShadowMap2;
+uniform sampler2D mShadowMap3;
+uniform mat4 mDepth0;
+uniform mat4 mDepth1;
+uniform mat4 mDepth2;
+uniform mat4 mDepth3;
 
 // UBOs: View-Projection matrix and camera params + textures
 layout(std140,binding=0) uniform mSceneParams {
@@ -108,6 +114,8 @@ vec3 funSpecular(vec3 lightDir,
 ////
 
 void main() {
+    vec3 mShadowVertex = (mDepth0 * vec4(mSourceVertex, 1)).xyz;
+
     vec2 poissonDisk[4] = vec2[](
         vec2( -0.94201624, -0.39906216 ),
         vec2( 0.94558609, -0.76890725 ),
@@ -127,7 +135,7 @@ void main() {
     float visibility = 1.0f;
 
     for (int i=0;i<4;i++){
-        float shadowD = texture(mShadowMap, shadowCoord.xy + poissonDisk[i] / 700.0).r;
+        float shadowD = texture(mShadowMap1, shadowCoord.xy + poissonDisk[i] / 700.0).r;
         if (shadowD < shadowCoord.z - bias2) {
             visibility -= 0.2f;
         }
