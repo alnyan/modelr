@@ -60,17 +60,17 @@ const MeshMaterial mMaterials[1] = {
     }
 };
 
-const LightParams mLights[2] = {
+const LightParams mLights[1] = {
     {
-        vec3(3, 2, 3),
+        vec3(10, 10, 10),
         vec3(0.5, 1, 1),
-        3
-    },
-    {
-        vec3(-3, 2, -3),
-        vec3(1, 0.7, 0.5),
-        10
+        100
     }
+    //{
+        //vec3(-3, 2, -3),
+        //vec3(1, 0.7, 0.5),
+        //10
+    //}
 };
 
 // Hardcoded params (yet)
