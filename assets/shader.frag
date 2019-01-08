@@ -6,6 +6,9 @@ in vec3 mSourceNormal;
 in vec2 mSourceTexCoord;
 in vec3 mSourceTangent;
 in vec3 mSourceBitangent;
+in vec3 mShadowVertex;
+
+uniform sampler2D mShadowMap;
 
 // UBOs: View-Projection matrix and camera params + textures
 layout(std140,binding=0) uniform mSceneParams {
@@ -105,6 +108,33 @@ vec3 funSpecular(vec3 lightDir,
 ////
 
 void main() {
+    vec2 poissonDisk[4] = vec2[](
+        vec2( -0.94201624, -0.39906216 ),
+        vec2( 0.94558609, -0.76890725 ),
+        vec2( -0.094184101, -0.92938870 ),
+        vec2( 0.34495938, 0.29387760 )
+    );
+    mat4 bias = mat4(
+        vec4(0.5, 0, 0, 0),
+        vec4(0, 0.5, 0, 0),
+        vec4(0, 0, 0.5, 0),
+        vec4(0.5, 0.5, 0.5, 1)
+    );
+    float bias2 = 0.005;
+
+    vec3 shadowCoord = (bias * vec4(mShadowVertex, 1)).xyz;
+
+    float visibility = 1.0f;
+
+    for (int i=0;i<4;i++){
+        float shadowD = texture(mShadowMap, shadowCoord.xy + poissonDisk[i] / 700.0).r;
+        if (shadowD < shadowCoord.z - bias2) {
+            visibility -= 0.2f;
+        }
+    }
+
+    // Post-shadow
+
     MeshMaterial mat = mMaterials[mMeshMaterials[0]];
     vec3 baseKd = texture(mTextures[0], mSourceTexCoord).rgb;
     vec3 mapNormal = normalize(texture(mTextures[1], mSourceTexCoord).rgb * 2.0 - vec3(1.0));
@@ -120,7 +150,7 @@ void main() {
 
     for (int i = 0; i < mLights.length(); ++i) {
         vec3 lightDir = matTBN * (mLights[i].mLightPos - mSourceVertex);
-        color += funDiffuse(baseKd, normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal);
-        color += funSpecular(normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal, eyeDir);
+        color += visibility * funDiffuse(baseKd, normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal);
+        color += visibility * funSpecular(normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal, eyeDir);
     }
 }
