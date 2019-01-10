@@ -17,8 +17,11 @@
 
 //
 
-#define R_SHADOW_MAP_WIDTH 2048
-#define R_SHADOW_MAP_HEIGHT 2048
+#define R_SHADOW_MAP_WIDTH      4096
+#define R_SHADOW_MAP_HEIGHT     4096
+#define S_TEXTURE_COUNT         256
+#define S_SHADOW_MAP_0          (S_TEXTURE_COUNT - 4)
+#define textureIndex(i)         ((i) * 2)
 
 static GLFWwindow *s_window;
 
@@ -36,6 +39,12 @@ struct SceneUniformData {
     glm::vec4 m_cameraDestination;
 };
 
+struct SceneLight0UniformData {
+    glm::mat4 m_projectionMatrix[4];
+    glm::mat4 m_lightMatrix;
+    glm::vec4 m_lightPosition;
+};
+
 struct MeshAttrib {
     int material;
 };
@@ -48,18 +57,17 @@ static GLuint s_modelMatrixBufferID,
               s_indirectCommandBufferID;
 static GLuint s_textureHandleBufferID;
 static GLuint s_textureIDs[2];
-static GLuint64 s_textureHandles[512];
+static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
 static std::vector<MeshAttrib> s_meshAttribs;
 static MeshBuilder *s_allGeometryBuilder;
 static Model s_models[3];
 
-
 // Scene-global data
 static GLuint s_sceneUniformBufferID;
+static GLuint s_sceneLight0UniformBufferID;
 static SceneUniformData s_sceneUniformData;
-static glm::mat4 s_cameraProjectionMatrix;
 static float s_cameraPitch = 0, s_cameraYaw = 0;
 static int s_walk = 0;
 static int s_strafe = 0;
@@ -90,8 +98,11 @@ static GLuint s_screenShaderID;
 static GLuint s_light0FramebufferID;
 static GLuint s_light0DepthTextureIDs[4];
 static GLuint s_depthShaderID;
-static glm::mat4 s_light0ProjectionMatrices[4];
-static glm::vec3 s_light0Position = glm::vec3(1, 1, 0);
+static SceneLight0UniformData s_light0UniformData {
+    {},
+    {},
+    glm::vec4(glm::normalize(glm::vec3(1, 1, 1)), 1)
+};
 
 static int s_viewType = 0;
 static int s_shadowControl = 0;
@@ -123,42 +134,16 @@ int loadData(void) {
         return -1;
     }
 
-#ifdef RENDER_TO_TEXTURE
     if (!Shader::loadProgram(s_screenShaderID, 2, GL_VERTEX_SHADER, "screen.vert", GL_FRAGMENT_SHADER, "screen.frag")) {
         std::cerr << "Failed to load screen shader" << std::endl;
         return -1;
     }
-#endif
 
     if (!Shader::loadProgram(s_depthShaderID, 2, GL_VERTEX_SHADER, "depth.vert", GL_FRAGMENT_SHADER, "depth.frag")) {
         std::cerr << "Failed to load screen shader" << std::endl;
         return -1;
     }
-    glGenTextures(sizeof(s_textureIDs) / sizeof(s_textureIDs[0]), s_textureIDs);
 
-    const char *textures[] = {
-        "assets/texture.png",
-        "assets/normal.png",
-    };
-
-    for (int i = 0; i < sizeof(s_textureIDs) / sizeof(s_textureIDs[0]); ++i) {
-        if (loadTexture(s_textureIDs[i], textures[i]) != 0) {
-            return -1;
-        }
-    }
-    for (int i = 0; i < sizeof(s_textureIDs) / sizeof(s_textureIDs[0]); ++i) {
-        s_textureHandles[i * 2] = glGetTextureHandleARB(s_textureIDs[i]);
-        if (glGetError()) {
-            std::cerr << "Failed to get texture handle" << std::endl;
-            return -1;
-        }
-        glMakeTextureHandleResidentARB(s_textureHandles[i * 2]);
-        if (glGetError()) {
-            std::cerr << "Failed to get texture handle" << std::endl;
-            return -1;
-        }
-    }
-    glNamedBufferData(s_textureHandleBufferID, sizeof(s_textureHandles), s_textureHandles, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &s_allGeometryArrayID);
     s_allGeometryBuilder = new MeshBuilder(s_allGeometryArrayID);
@@ -217,11 +202,61 @@ int init(void) {
     return 0;
 }
 
+int loadTextures(void) {
+    const char *textures[] = {
+        "assets/texture.png",
+        "assets/normal.png",
+    };
+
+    glGenTextures(sizeof(textures) / sizeof(textures[0]), s_textureIDs);
+
+    for (int i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i) {
+        if (loadTexture(s_textureIDs[i], textures[i]) != 0) {
+            return -1;
+        }
+    }
+    int e;
+    for (int i = 0; i < 4; ++i) {
+        std::cout << "Shadow map " << i << ": " << s_light0DepthTextureIDs[i] << std::endl;
+        s_textureHandles[textureIndex(i + S_SHADOW_MAP_0)] = glGetTextureHandleARB(s_light0DepthTextureIDs[i]);
+        if (glGetError()) {
+            std::cerr << "Failed to get shadow map handle" << std::endl;
+            return -1;
+        }
+        glMakeTextureHandleResidentARB(s_textureHandles[textureIndex(i + S_SHADOW_MAP_0)]);
+        if (glGetError()) {
+            std::cerr << "Failed to get shadow map handle" << std::endl;
+            return -1;
+        }
+    }
+    for (int i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i) {
+        s_textureHandles[textureIndex(i)] = glGetTextureHandleARB(s_textureIDs[i]);
+        if ((e = glGetError())) {
+            std::cerr << "Failed to get texture handle for " << i << std::endl;
+            return -1;
+        }
+        glMakeTextureHandleResidentARB(s_textureHandles[textureIndex(i)]);
+        if (glGetError()) {
+            std::cerr << "Failed to make texture handle resident for " << i << std::endl;
+            return -1;
+        }
+    }
+
+    glGenBuffers(1, &s_textureHandleBufferID);
+
+    glBindBuffer(GL_UNIFORM_BUFFER, s_textureHandleBufferID);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(s_textureHandles), s_textureHandles, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, s_textureHandleBufferID);
+
+    return 0;
+}
+
 int setup_gl(void) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-#ifdef RENDER_TO_TEXTURE
+    // Post-processing and render to texture setup
     glGenFramebuffers(1, &s_sceneBuffer);
     glGenTextures(2, s_sceneTextures);
     glGenRenderbuffers(1, &s_depthBufferID);
@@ -257,10 +292,10 @@ int setup_gl(void) {
         std::cerr << "Failed to create framebuffer" << std::endl;
         return -1;
     }
-#endif
+
+    // Light framebuffer setup
     glGenFramebuffers(1, &s_light0FramebufferID);
     glGenTextures(4, s_light0DepthTextureIDs);
-
     for (int i = 0; i < 4; ++i) {
         glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
@@ -270,7 +305,6 @@ int setup_gl(void) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
-
     glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
     glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureIDs[0], 0);
     glDrawBuffer(GL_NONE);
@@ -282,12 +316,12 @@ int setup_gl(void) {
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    // Main data setup
     glClearColor(0, 0.25, 0.25, 1);
 
     glGenBuffers(1, &s_modelMatrixBufferID);
     glGenBuffers(1, &s_indirectCommandBufferID);
     glGenBuffers(1, &s_meshAttribBufferID);
-    glGenBuffers(1, &s_textureHandleBufferID);
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
     glBufferData(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
@@ -295,22 +329,98 @@ int setup_gl(void) {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, s_modelMatrixBufferID);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, s_meshAttribBufferID);
 
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, s_textureHandleBufferID);
 
     // Scene buffer
-
     glGenBuffers(1, &s_sceneUniformBufferID);
 
     glBindBuffer(GL_UNIFORM_BUFFER, s_sceneUniformBufferID);
     glBufferData(GL_UNIFORM_BUFFER, sizeof(s_sceneUniformData), &s_sceneUniformData, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
+
+    // Light0 buffer
+    glGenBuffers(1, &s_sceneLight0UniformBufferID);
+    glBindBuffer(GL_UNIFORM_BUFFER, s_sceneLight0UniformBufferID);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(SceneLight0UniformData), &s_light0UniformData, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    if (loadTextures()) {
+        return -1;
+    }
+
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, s_sceneUniformBufferID);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 2, s_sceneLight0UniformBufferID);
 
     s_lastTime = glfwGetTime();
 
     return 0;
 }
+
+////
+
+void updatePlayer(double t, double dt) {
+    if (s_walk || s_strafe || s_fly) {
+        auto walkDir = glm::normalize(glm::vec4(
+            s_walk * cos(s_cameraYaw) + s_strafe * sin(s_cameraYaw),
+            s_fly,
+            s_walk * sin(s_cameraYaw) - s_strafe * cos(s_cameraYaw),
+            0
+        ));
+        auto walkDelta = walkDir * (float) dt * 10.0f;
+
+        s_sceneUniformData.m_cameraPosition += walkDelta;
+        s_sceneUniformData.m_cameraDestination += walkDelta;
+    }
+
+    s_sceneUniformData.m_cameraMatrix = glm::lookAt(
+        glm::vec3(s_sceneUniformData.m_cameraPosition),
+        glm::vec3(s_sceneUniformData.m_cameraDestination),
+        { 0, 1, 0 }
+    );
+
+    if (m_width && m_height) {
+        float fov = 45.0f;
+        float aspect = ((float) m_height) / ((float) m_width);
+        s_sceneUniformData.m_projectionMatrix = glm::perspective(fov, 1 / aspect, 0.1f, 100.0f);
+    }
+}
+
+void updateLight0(double t) {
+    if (m_width != 0 && m_height != 0) {
+        s_light0UniformData.m_lightMatrix = glm::lookAt(
+            glm::vec3(s_light0UniformData.m_lightPosition),
+            glm::vec3(0, 0, 0),
+            glm::vec3(0, 1, 0)
+        );
+
+        auto lightP = s_light0UniformData.m_lightMatrix * glm::vec4(glm::vec3(s_sceneUniformData.m_cameraPosition), 1);
+        float cascades[] {
+            20,
+            40,
+            80,
+            100
+        };
+
+        for (int i = 0; i < 4; ++i) {
+            s_light0UniformData.m_projectionMatrix[i] = glm::ortho(
+                lightP.x - cascades[i],
+                lightP.x + cascades[i],
+                lightP.y - cascades[i],
+                lightP.y + cascades[i],
+                -lightP.z - cascades[i],
+                -lightP.z + cascades[i]
+            );
+        }
+    }
+
+}
+
+void update(double t, double dt) {
+    updatePlayer(t, dt);
+    updateLight0(t);
+}
+
+////
 
 void renderScene(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
@@ -318,38 +428,6 @@ void renderScene(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(s_sceneShaderID);
 
-    {
-        auto l = glGetUniformLocation(s_sceneShaderID, "mDepth0");
-        auto depthMVP = s_light0ProjectionMatrices[0] * s_sceneUniformData.m_cameraMatrix;
-        glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
-        l = glGetUniformLocation(s_sceneShaderID, "mDepth1");
-        depthMVP = s_light0ProjectionMatrices[1] * s_sceneUniformData.m_cameraMatrix;
-        glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
-        l = glGetUniformLocation(s_sceneShaderID, "mDepth2");
-        depthMVP = s_light0ProjectionMatrices[2] * s_sceneUniformData.m_cameraMatrix;
-        glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
-        l = glGetUniformLocation(s_sceneShaderID, "mDepth3");
-        depthMVP = s_light0ProjectionMatrices[3] * s_sceneUniformData.m_cameraMatrix;
-        glUniformMatrix4fv(l, 1, GL_FALSE, &depthMVP[0][0]);
-        l = glGetUniformLocation(s_sceneShaderID, "mShadowMap1");
-        glUniform1i(l, 1);
-        l = glGetUniformLocation(s_sceneShaderID, "mShadowMap2");
-        glUniform1i(l, 2);
-        l = glGetUniformLocation(s_sceneShaderID, "mShadowMap3");
-        glUniform1i(l, 3);
-        l = glGetUniformLocation(s_sceneShaderID, "mLight0Pos");
-        glUniform3f(l, s_light0Position.x, s_light0Position.y, s_light0Position.z);
-        glBindTextures(0, 4, s_light0DepthTextureIDs);
-    }
-
-    s_sceneUniformData.m_cameraMatrix = glm::lookAt(
-        glm::vec3(s_sceneUniformData.m_cameraPosition),
-        glm::vec3(s_sceneUniformData.m_cameraDestination),
-        glm::vec3(0, 1, 0)
-    );
-    s_sceneUniformData.m_projectionMatrix = s_cameraProjectionMatrix;
-
-    glNamedBufferSubData(s_sceneUniformBufferID, 0, sizeof(SceneUniformData), &s_sceneUniformData);
 
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 
@@ -361,13 +439,8 @@ void renderLight0(int i) {
     glViewport(0, 0, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT);
     glClear(GL_DEPTH_BUFFER_BIT);
 
-    s_sceneUniformData.m_cameraMatrix = glm::lookAt(
-        s_light0Position,
-        glm::vec3(0, 0, 0),
-        glm::vec3(0, 1, 0)
-    );
-    s_sceneUniformData.m_projectionMatrix = s_light0ProjectionMatrices[i];
-    glNamedBufferSubData(s_sceneUniformBufferID, 0, sizeof(SceneUniformData), &s_sceneUniformData);
+    auto l = glGetUniformLocation(s_depthShaderID, "mRenderCascade");
+    glUniform1i(l, i);
 
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 }
@@ -397,55 +470,16 @@ void renderScreen(void) {
 
 void render(void) {
     auto t = glfwGetTime();
+    auto dt = t - s_lastTime;
     s_lastTime = t;
 
-    s_light0Position = glm::normalize(glm::vec3(1, 1, 1));
+    update(t, dt);
+
+    glNamedBufferData(s_sceneUniformBufferID, sizeof(SceneUniformData), &s_sceneUniformData, GL_DYNAMIC_DRAW);
+    glNamedBufferData(s_sceneLight0UniformBufferID, sizeof(SceneLight0UniformData), &s_light0UniformData, GL_DYNAMIC_DRAW);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    if (m_width != 0 && m_height != 0) {
-        if (s_walk || s_strafe || s_fly) {
-            auto walkDir = glm::normalize(glm::vec4(
-                s_walk * cos(s_cameraYaw) + s_strafe * sin(s_cameraYaw),
-                s_fly,
-                s_walk * sin(s_cameraYaw) - s_strafe * cos(s_cameraYaw),
-                0
-            ));
-            auto walkDelta = walkDir * 0.1f;
-
-
-            s_sceneUniformData.m_cameraPosition += walkDelta;
-            s_sceneUniformData.m_cameraDestination += walkDelta;
-        }
-        float fov = 45.0f;
-        float aspect = ((float) m_height) / ((float) m_width);
-        s_cameraProjectionMatrix = glm::perspective(fov, 1 / aspect, 0.1f, 100.0f);
-
-        auto lightMatrix = glm::lookAt(
-            s_light0Position,
-            glm::vec3(0, 0, 0),
-            glm::vec3(0, 1, 0)
-        );
-        auto lightP = lightMatrix * glm::vec4(glm::vec3(s_sceneUniformData.m_cameraPosition), 1);
-        float cascades[] {
-            20,
-            40,
-            80,
-            100
-        };
-
-        for (int i = 0; i < 4; ++i) {
-            s_light0ProjectionMatrices[i] = glm::ortho(
-                lightP.x - cascades[i],
-                lightP.x + cascades[i],
-                lightP.y - cascades[i],
-                lightP.y + cascades[i],
-                -lightP.z - cascades[i],
-                -lightP.z + cascades[i]
-            );
-        }
-    }
 
     glBindVertexArray(s_allGeometryArrayID);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
@@ -491,7 +525,6 @@ void render(void) {
 //
 
 void windowSizeCallback(GLFWwindow *win, int width, int height) {
-    glViewport(0, 0, width, height);
     m_width = width;
     m_height = height;
 
@@ -499,12 +532,7 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    //for (int i = 0; i < 4; ++i) {
-        //glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    //}
     glBindTexture(GL_TEXTURE_2D, 0);
-
 }
 
 void cursorPosCallback(GLFWwindow *win, double x, double y) {
@@ -519,12 +547,6 @@ void cursorPosCallback(GLFWwindow *win, double x, double y) {
 
     s_cameraPitch -= cy;
     s_cameraYaw += cx;
-
-    //glm::mat4 matPitch(1), matYaw(1);
-    //matPitch = glm::rotate(matPitch, s_cameraPitch, glm::vec3(1, 0, 0));
-    //matYaw = glm::rotate(matYaw, s_cameraYaw, glm::vec3(0, 1, 0));
-    //auto rot = matPitch * matYaw;
-    //camVector = rot * camVector;
 
     s_sceneUniformData.m_cameraDestination = s_sceneUniformData.m_cameraPosition + glm::vec4(cos(s_cameraYaw), 0, glm::sin(s_cameraYaw), 0);
 }
@@ -599,7 +621,7 @@ int main() {
 
     glfwSwapInterval(1);
 
-    if (setup_gl() != 0 || loadData() != 0 || init() != 0) {
+    if (loadData() != 0 || setup_gl() != 0 || init() != 0) {
         glfwTerminate();
         return -1;
     }

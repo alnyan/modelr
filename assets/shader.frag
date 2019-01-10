@@ -1,23 +1,16 @@
 #version 430 core
 #extension GL_ARB_bindless_texture : require
 
+#define S_TEXTURE_COUNT     256
+#define S_SHADOW_MAP_0      (S_TEXTURE_COUNT - 4)
+
+////
+
 in vec3 mSourceVertex;
 in vec3 mSourceNormal;
 in vec2 mSourceTexCoord;
 in vec3 mSourceTangent;
 in vec3 mSourceBitangent;
-in vec3 mClipSpacePos;
-
-// TODO: optimize value transfer
-uniform sampler2D mShadowMap0;
-uniform sampler2D mShadowMap1;
-uniform sampler2D mShadowMap2;
-uniform sampler2D mShadowMap3;
-uniform mat4 mDepth0;
-uniform mat4 mDepth1;
-uniform mat4 mDepth2;
-uniform mat4 mDepth3;
-uniform vec3 mLight0Pos;
 
 // UBOs: View-Projection matrix and camera params + textures
 layout(std140,binding=0) uniform mSceneParams {
@@ -28,8 +21,15 @@ layout(std140,binding=0) uniform mSceneParams {
 };
 
 layout(std140,binding=1) uniform mSamplerBuffer {
-    sampler2D mTextures[256];
+    sampler2D mTextures[S_TEXTURE_COUNT];
 };
+
+layout(std140,binding=2) uniform mLight0Buffer {
+    mat4 mLightProjection[4];
+    mat4 mLightMatrix;
+    vec4 mLight0Pos;
+};
+
 //
 
 // Model parameter SSBOs
@@ -59,8 +59,6 @@ struct LightParams {
     float mLightIntensity;
 };
 
-uniform vec4 mSomeVector;
-
 const MeshMaterial mMaterials[1] = {
     {
         vec3(0, 1, 0),
@@ -74,7 +72,7 @@ const MeshMaterial mMaterials[1] = {
 LightParams mLights[1] = {
     // Sunlight
     {
-        vec4(-mLight0Pos, 0),
+        vec4(-mLight0Pos.xyz, 0),
         vec3(0.5, 1, 1),
         1
     }
@@ -145,13 +143,16 @@ vec3 funSpecularDir(vec3 lightDir,
 
 const float shadowHardness = 0.2;
 
-float shadowFactor(int idx, vec3 shadowVertex) {
+float shadowFactor(int idx) {
+    vec3 shadowVertex = (mLightProjection[idx] * mLightMatrix * vec4(mSourceVertex, 1)).xyz;
+
     vec2 poissonDisk[4] = vec2[](
         vec2( -0.94201624, -0.39906216 ),
         vec2( 0.94558609, -0.76890725 ),
         vec2( -0.094184101, -0.92938870 ),
         vec2( 0.34495938, 0.29387760 )
     );
+
     mat4 bias = mat4(
         vec4(0.5, 0, 0, 0),
         vec4(0, 0.5, 0, 0),
@@ -163,20 +164,8 @@ float shadowFactor(int idx, vec3 shadowVertex) {
     float visibility = 1.0f;
     for (int i = 0; i < 4; ++i){
         float shadowD;
-        switch (idx) {
-        case 0:
-            shadowD = texture(mShadowMap0, shadowCoord.xy + poissonDisk[i] / 700.0).r;
-            break;
-        case 1:
-            shadowD = texture(mShadowMap1, shadowCoord.xy + poissonDisk[i] / 700.0).r;
-            break;
-        case 2:
-            shadowD = texture(mShadowMap2, shadowCoord.xy + poissonDisk[i] / 700.0).r;
-            break;
-        case 3:
-            shadowD = texture(mShadowMap3, shadowCoord.xy + poissonDisk[i] / 700.0).r;
-            break;
-        }
+        shadowD = texture(mTextures[S_SHADOW_MAP_0 + idx], shadowCoord.xy + poissonDisk[i] / 700.0).r;
+
         if (shadowD < shadowCoord.z - bias2) {
             visibility -= shadowHardness;
         }
@@ -186,13 +175,6 @@ float shadowFactor(int idx, vec3 shadowVertex) {
 }
 
 void main() {
-    vec3 shadowVertices[4] = {
-        (mDepth0 * vec4(mSourceVertex, 1)).xyz,
-        (mDepth1 * vec4(mSourceVertex, 1)).xyz,
-        (mDepth2 * vec4(mSourceVertex, 1)).xyz,
-        (mDepth3 * vec4(mSourceVertex, 1)).xyz
-    };
-
     float visibility = 1.0f;
 
     vec3 vertexD = mCameraPosition.xyz - mSourceVertex;
@@ -213,7 +195,7 @@ void main() {
         if (abs(vertexD.x) < cascades[i] &&
             abs(vertexD.y) < cascades[i] &&
             abs(vertexD.z) < cascades[i]) {
-            visibility = shadowFactor(i, shadowVertices[i]);
+            visibility = shadowFactor(i);
             break;
         }
     }

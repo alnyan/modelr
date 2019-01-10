@@ -23,7 +23,6 @@ out vec3 mSourceNormal;
 out vec2 mSourceTexCoord;
 out vec3 mSourceTangent;
 out vec3 mSourceBitangent;
-out vec3 mClipSpacePos;
 
 void main() {
     mat4 mModelMatrix = mModelMatrices[gl_DrawIDARB];
@@ -35,5 +34,4 @@ void main() {
     mSourceBitangent = mBitangent;
 
     gl_Position = mProjectionMatrix * mCameraMatrix * mModelMatrix * vec4(mVertex, 1.0);
-    mClipSpacePos = gl_Position.xyz;
 }
