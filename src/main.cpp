@@ -17,7 +17,8 @@
 
 //
 
-//#define R_FRUSTUM_LENGTH 8
+#define R_SHADOW_MAP_WIDTH 2048
+#define R_SHADOW_MAP_HEIGHT 2048
 
 static GLFWwindow *s_window;
 //static Shader *s_shader;
@@ -267,7 +268,7 @@ int setup_gl(void) {
 
     for (int i = 0; i < 4; ++i) {
         glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 800, 600, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
@@ -362,7 +363,7 @@ void renderScene(void) {
 
 void renderLight0(int i) {
     glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureIDs[i], 0);
-    glViewport(0, 0, m_width, m_height);
+    glViewport(0, 0, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT);
     glClear(GL_DEPTH_BUFFER_BIT);
 
     s_sceneUniformData.m_cameraMatrix = glm::lookAt(
@@ -503,10 +504,10 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    for (int i = 0; i < 4; ++i) {
-        glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    }
+    //for (int i = 0; i < 4; ++i) {
+        //glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    //}
     glBindTexture(GL_TEXTURE_2D, 0);
 
 }
