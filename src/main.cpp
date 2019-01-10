@@ -21,27 +21,14 @@
 #define R_SHADOW_MAP_HEIGHT 2048
 
 static GLFWwindow *s_window;
-//static Shader *s_shader;
 
 static constexpr float s_moveSpeed = 5;
-static double s_walkStart = 0;
 static int m_width, m_height;
-static double s_lastTime = 0;
 
-static int s_walk = 0;
-static int s_strafe = 0;
-static int s_fly = 0;
-
-static double s_meanFrameTime = 0;
-static double s_frameTimeSum = 0;
-
-static GLuint s_renderMode = GL_TRIANGLES;
-
-static glm::mat4 s_projectionMatrix;
-
-typedef struct {
+struct DrawArraysIndirectCommand {
     GLuint count, instanceCount, first, baseInstance;
-} DrawArraysIndirectCommand;
+};
+
 struct SceneUniformData {
     glm::mat4 m_projectionMatrix;
     glm::mat4 m_cameraMatrix;
@@ -53,28 +40,38 @@ struct MeshAttrib {
     int material;
 };
 
+// Dynamic objects
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
-static GLuint s_modelMatrixBufferID, s_meshAttribBufferID, s_indirectCommandBufferID;
+static GLuint s_modelMatrixBufferID,
+              s_meshAttribBufferID,
+              s_indirectCommandBufferID;
 static GLuint s_textureHandleBufferID;
 static GLuint s_textureIDs[2];
 static GLuint64 s_textureHandles[512];
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
 static std::vector<MeshAttrib> s_meshAttribs;
-
-static double s_transferTime, s_drawCallTime;
-
 static MeshBuilder *s_allGeometryBuilder;
 static Model s_models[3];
 
+
+// Scene-global data
 static GLuint s_sceneUniformBufferID;
 static SceneUniformData s_sceneUniformData;
-//static Scene *s_scene;
-//static GameObject *s_player;
-//static Camera *s_camera;
+static glm::mat4 s_cameraProjectionMatrix;
+static float s_cameraPitch = 0, s_cameraYaw = 0;
+static int s_walk = 0;
+static int s_strafe = 0;
+static int s_fly = 0;
 
-#ifdef RENDER_TO_TEXTURE
+// Time measurements
+static double s_transferTime, s_drawCallTime;
+static double s_meanFrameTime = 0;
+static double s_frameTimeSum = 0;
+static double s_lastTime = 0;
+
+// Post-processing
 static GLuint s_sceneBuffer;
 static GLuint s_sceneTextures[2];
 static GLuint s_screenArrayID, s_screenBufferID, s_depthBufferID;
@@ -88,18 +85,16 @@ static GLfloat s_screenQuadData[] {
     -1, -1, 0, 0, 0
 };
 static GLuint s_screenShaderID;
-#endif
 
+// Lighting
 static GLuint s_light0FramebufferID;
 static GLuint s_light0DepthTextureIDs[4];
 static GLuint s_depthShaderID;
 static glm::mat4 s_light0ProjectionMatrices[4];
 static glm::vec3 s_light0Position = glm::vec3(1, 1, 0);
-static glm::mat4 s_cameraProjectionMatrix;
 
 static int s_viewType = 0;
 static int s_shadowControl = 0;
-static float s_cameraPitch = 0, s_cameraYaw = 0;
 
 //
 
@@ -548,45 +543,21 @@ void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
 
     if (key == GLFW_KEY_W) {
         s_walk = !!action;
-        if (action == 1) {
-            s_walkStart = glfwGetTime();
-        }
     }
     if (key == GLFW_KEY_S) {
         s_walk = -!!action;
-        if (action == 1) {
-            s_walkStart = glfwGetTime();
-        }
     }
     if (key == GLFW_KEY_A) {
         s_strafe = !!action;
-        if (action == 1) {
-            s_walkStart = glfwGetTime();
-        }
     }
     if (key == GLFW_KEY_D) {
         s_strafe = -!!action;
-        if (action == 1) {
-            s_walkStart = glfwGetTime();
-        }
     }
     if (key == GLFW_KEY_SPACE) {
         s_fly = !!action;
     }
     if (key == GLFW_KEY_LEFT_SHIFT) {
         s_fly = -!!action;
-    }
-
-    if (key == GLFW_KEY_M && action == 1) {
-        if (s_renderMode == GL_TRIANGLES) {
-            s_renderMode = GL_LINES;
-        } else {
-            s_renderMode = GL_TRIANGLES;
-        }
-
-        //for (auto &obj: s_scene->meshObjects) {
-            //obj->setRenderMode(s_renderMode);
-        //}
     }
 }
 
