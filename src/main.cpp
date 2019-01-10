@@ -341,6 +341,8 @@ void renderScene(void) {
         glUniform1i(l, 2);
         l = glGetUniformLocation(s_sceneShaderID, "mShadowMap3");
         glUniform1i(l, 3);
+        l = glGetUniformLocation(s_sceneShaderID, "mLight0Pos");
+        glUniform3f(l, s_light0Position.x, s_light0Position.y, s_light0Position.z);
         glBindTextures(0, 4, s_light0DepthTextureIDs);
     }
 

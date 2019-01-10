@@ -8,6 +8,7 @@ in vec3 mSourceTangent;
 in vec3 mSourceBitangent;
 in vec3 mClipSpacePos;
 
+// TODO: optimize value transfer
 uniform sampler2D mShadowMap0;
 uniform sampler2D mShadowMap1;
 uniform sampler2D mShadowMap2;
@@ -16,6 +17,7 @@ uniform mat4 mDepth0;
 uniform mat4 mDepth1;
 uniform mat4 mDepth2;
 uniform mat4 mDepth3;
+uniform vec3 mLight0Pos;
 
 // UBOs: View-Projection matrix and camera params + textures
 layout(std140,binding=0) uniform mSceneParams {
@@ -69,9 +71,10 @@ const MeshMaterial mMaterials[1] = {
     }
 };
 
-const LightParams mLights[1] = {
+LightParams mLights[1] = {
+    // Sunlight
     {
-        vec4(-1, -1, -1, 0),
+        vec4(-mLight0Pos, 0),
         vec3(0.5, 1, 1),
         1
     }
