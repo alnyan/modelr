@@ -12,11 +12,12 @@ uniform mat4 mCameraMatrix;
 
 uniform vec4 mScreenDimensions;
 
+const float gamma = 2.2;
+
 void main() {
-    float d = texture2D(mDepthTexture, mSourceTexCoord).x;
-    float d_n = 2.0 * d - 1.0;
-    float d_e = 2.0 * 0.1f * 100.0f / (100.0f + 0.1f - d_n * (100.0f - 0.1f));
-    //color = texture(mDepthTexture, mSourceTexCoord).rgb;
-    color = vec3(d_e / 100);
-    color = texture(mTexture, mSourceTexCoord).rgb;;
+    vec3 colorHdr = texture(mTexture, mSourceTexCoord).rgb;
+    vec3 toneMapped = colorHdr / (colorHdr + vec3(1));
+    toneMapped = pow(toneMapped, vec3(1 / gamma));
+
+    color = toneMapped;
 }
