@@ -17,6 +17,8 @@
 
 //
 
+//#define R_FRUSTUM_LENGTH 8
+
 static GLFWwindow *s_window;
 //static Shader *s_shader;
 
@@ -91,7 +93,12 @@ static GLuint s_light0FramebufferID;
 static GLuint s_light0DepthTextureIDs[4];
 static GLuint s_depthShaderID;
 static glm::mat4 s_light0ProjectionMatrices[4];
+static glm::vec3 s_light0Position = glm::vec3(1, 1, 0);
 static glm::mat4 s_cameraProjectionMatrix;
+
+static int s_viewType = 0;
+static int s_shadowControl = 0;
+static float s_cameraPitch = 0, s_cameraYaw = 0;
 
 //
 
@@ -166,6 +173,10 @@ int loadData(void) {
         std::cerr << "Failed to load model" << std::endl;
         return -1;
     }
+    if (!Wavefront::loadObj(&s_models[1], mat, s_allGeometryBuilder, "terrain.obj")) {
+        std::cerr << "Failed to load model" << std::endl;
+        return -1;
+    }
     s_allGeometryBuilder->commit();
 
     std::cout << "Loading complete" << std::endl;
@@ -173,22 +184,16 @@ int loadData(void) {
 }
 
 int init(void) {
-    //s_scene = new Scene(s_projectionMatrix);
-
-    //s_player = new GameObject();
-    //s_camera = new FPSCamera(s_player);
-
-    //s_player->setPosition({ 0, 0, 0 });
-    //s_camera->setRotation({ 0 * 3.14 / 180, -180 * 3.14 / 180, 0 });
-
-    //s_scene->add(s_player);
-    //s_scene->setActiveCamera(s_camera);
-
-    s_sceneUniformData.m_cameraPosition = glm::vec4(16, 10, 4, 1);
+    s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
+    s_sceneUniformData.m_cameraDestination = glm::vec4(2, 2, 3, 1);
 
     // Setup drawcalls
-    for (int i = -6; i <= 6; ++i) {
-        for (int j = -6; j <= 6; ++j) {
+    s_indirectCommands.push_back({ s_models[1].size, 1, s_models[1].begin, 0 });
+    s_modelMatrices.push_back(glm::mat4(1));
+    s_meshAttribs.push_back({ 0 });
+
+    for (int i = -24; i <= 6; ++i) {
+        for (int j = -24; j <= 6; ++j) {
             s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
             s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
             s_meshAttribs.push_back({ 0 });
@@ -198,6 +203,13 @@ int init(void) {
         for (int j = 1; j <= 3; ++j) {
             s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
             s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, 4)));
+            s_meshAttribs.push_back({ 0 });
+        }
+    }
+    for (int i = -5; i <= 5; ++i) {
+        for (int j = 1; j <= 3; ++j) {
+            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
+            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, -4)));
             s_meshAttribs.push_back({ 0 });
         }
     }
@@ -213,8 +225,6 @@ int setup_gl(void) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    s_projectionMatrix = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
-
 #ifdef RENDER_TO_TEXTURE
     glGenFramebuffers(1, &s_sceneBuffer);
     glGenTextures(2, s_sceneTextures);
@@ -223,7 +233,7 @@ int setup_gl(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
 
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
@@ -260,6 +270,8 @@ int setup_gl(void) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 800, 600, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -306,6 +318,7 @@ int setup_gl(void) {
 
 void renderScene(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
+    glViewport(0, 0, m_width, m_height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(s_sceneShaderID);
 
@@ -338,7 +351,6 @@ void renderScene(void) {
     );
     s_sceneUniformData.m_projectionMatrix = s_cameraProjectionMatrix;
 
-    //glNamedBufferData(s_sceneUniformBufferID, sizeof(glm::mat4), &s_sceneUniformData, GL_DYNAMIC_DRAW);
     glNamedBufferSubData(s_sceneUniformBufferID, 0, sizeof(SceneUniformData), &s_sceneUniformData);
 
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
@@ -348,11 +360,11 @@ void renderScene(void) {
 
 void renderLight0(int i) {
     glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureIDs[i], 0);
+    glViewport(0, 0, m_width, m_height);
     glClear(GL_DEPTH_BUFFER_BIT);
 
-    s_sceneUniformData.m_cameraDestination = glm::vec4(0, 0, 0, 1);
     s_sceneUniformData.m_cameraMatrix = glm::lookAt(
-        glm::vec3(1, 1, 1),
+        s_light0Position,
         glm::vec3(0, 0, 0),
         glm::vec3(0, 1, 0)
     );
@@ -373,7 +385,8 @@ void renderScreen(void) {
     glUniform4f(l, screenDimensions.x, screenDimensions.y, screenDimensions.z, screenDimensions.w);
 
     glBindTextures(0, 2, s_sceneTextures);
-    glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[1]);
+    if (s_viewType)
+        glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[s_viewType - 1]);
 
     glBindVertexArray(s_screenArrayID);
     glEnableVertexAttribArray(0);
@@ -388,10 +401,53 @@ void render(void) {
     auto t = glfwGetTime();
     s_lastTime = t;
 
+    s_light0Position = glm::normalize(glm::vec3(1, 1, 1));
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    s_sceneUniformData.m_cameraPosition += glm::vec4(s_walk * 0.01, s_fly * 0.01, s_strafe * 0.01, 0);
+    if (m_width != 0 && m_height != 0) {
+        if (s_walk || s_strafe || s_fly) {
+            auto walkDir = glm::normalize(glm::vec4(
+                s_walk * cos(s_cameraYaw) + s_strafe * sin(s_cameraYaw),
+                s_fly,
+                s_walk * sin(s_cameraYaw) - s_strafe * cos(s_cameraYaw),
+                0
+            ));
+            auto walkDelta = walkDir * 0.1f;
+
+
+            s_sceneUniformData.m_cameraPosition += walkDelta;
+            s_sceneUniformData.m_cameraDestination += walkDelta;
+        }
+        float fov = 45.0f;
+        float aspect = ((float) m_height) / ((float) m_width);
+        s_cameraProjectionMatrix = glm::perspective(fov, 1 / aspect, 0.1f, 100.0f);
+
+        auto lightMatrix = glm::lookAt(
+            s_light0Position,
+            glm::vec3(0, 0, 0),
+            glm::vec3(0, 1, 0)
+        );
+        auto lightP = lightMatrix * glm::vec4(glm::vec3(s_sceneUniformData.m_cameraPosition), 1);
+        float cascades[] {
+            20,
+            40,
+            80,
+            100
+        };
+
+        for (int i = 0; i < 4; ++i) {
+            s_light0ProjectionMatrices[i] = glm::ortho(
+                lightP.x - cascades[i],
+                lightP.x + cascades[i],
+                lightP.y - cascades[i],
+                lightP.y + cascades[i],
+                -lightP.z - cascades[i],
+                -lightP.z + cascades[i]
+            );
+        }
+    }
 
     glBindVertexArray(s_allGeometryArrayID);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
@@ -404,10 +460,12 @@ void render(void) {
     // BEGIN RENDER
     // BLAST 1: LIGHT'S ORTHO
     glUseProgram(s_depthShaderID);
+    glCullFace(GL_FRONT);
     glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
     for (int i = 0; i < 4; ++i) {
         renderLight0(i);
     }
+    glCullFace(GL_BACK);
 
     // BLAST 2: PLAYER'S CAMERA
     renderScene();
@@ -439,35 +497,52 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     m_width = width;
     m_height = height;
 
-#ifdef RENDER_TO_TEXTURE
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
     for (int i = 0; i < 4; ++i) {
         glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
-    //s_scene->setViewport(m_width, m_height);
-#endif
 
-    for (int i = 0; i < 4; ++i) {
-        s_light0ProjectionMatrices[i] = glm::ortho<float>(-40, 40, -40, 40, -20, 50);
-    }
-    s_cameraProjectionMatrix = glm::perspective(glm::radians(45.0f), ((float) width) / ((float) height), 0.1f, 100.0f);
 }
 
 void cursorPosCallback(GLFWwindow *win, double x, double y) {
     double cx = (x - m_width / 2) / m_width;
     double cy = (y - m_height / 2) / m_height;
 
+    if (m_width == 0 || m_height == 0) {
+        return;
+    }
+
     glfwSetCursorPos(win, m_width / 2, m_height / 2);
 
-    //s_camera->rotate(glm::vec3(cy * 1.5, cx * 1.5, 0));
+    s_cameraPitch -= cy;
+    s_cameraYaw += cx;
+
+    //glm::mat4 matPitch(1), matYaw(1);
+    //matPitch = glm::rotate(matPitch, s_cameraPitch, glm::vec3(1, 0, 0));
+    //matYaw = glm::rotate(matYaw, s_cameraYaw, glm::vec3(0, 1, 0));
+    //auto rot = matPitch * matYaw;
+    //camVector = rot * camVector;
+
+    s_sceneUniformData.m_cameraDestination = s_sceneUniformData.m_cameraPosition + glm::vec4(cos(s_cameraYaw), 0, glm::sin(s_cameraYaw), 0);
 }
 
 void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
+    if (key == GLFW_KEY_T && action == 1) {
+        ++s_viewType;
+        s_viewType %= 5;
+    }
+    if (key == GLFW_KEY_EQUAL && action == 1) {
+        ++s_shadowControl;
+    }
+    if (key == GLFW_KEY_MINUS && action == 1) {
+        --s_shadowControl;
+    }
+
     if (key == GLFW_KEY_W) {
         s_walk = !!action;
         if (action == 1) {
