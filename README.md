@@ -18,6 +18,8 @@ Features
     * Diffuse maps
     * Normal maps
 * Phong lighting model
+* Shadowmap generation
+    * Simple cascading to ensure best quality near player
 
 
 Planned features
