@@ -143,31 +143,29 @@ vec3 funSpecularDir(vec3 lightDir,
 ////
 
 const float shadowHardness = 0.2;
+const vec2 poissonDisk[4] = vec2[](
+    vec2( -0.94201624, -0.39906216 ),
+    vec2( 0.94558609, -0.76890725 ),
+    vec2( -0.094184101, -0.92938870 ),
+    vec2( 0.34495938, 0.29387760 )
+);
+const mat4 shadowBias = mat4(
+    vec4(0.5, 0, 0, 0),
+    vec4(0, 0.5, 0, 0),
+    vec4(0, 0, 0.5, 0),
+    vec4(0.5, 0.5, 0.5, 1)
+);
+const float shadowBias2 = 0.005;
 
 float shadowFactor(int idx) {
     vec3 shadowVertex = (mLightProjection[idx] * mLightMatrix * vec4(mSourceVertex, 1)).xyz;
-
-    vec2 poissonDisk[4] = vec2[](
-        vec2( -0.94201624, -0.39906216 ),
-        vec2( 0.94558609, -0.76890725 ),
-        vec2( -0.094184101, -0.92938870 ),
-        vec2( 0.34495938, 0.29387760 )
-    );
-
-    mat4 bias = mat4(
-        vec4(0.5, 0, 0, 0),
-        vec4(0, 0.5, 0, 0),
-        vec4(0, 0, 0.5, 0),
-        vec4(0.5, 0.5, 0.5, 1)
-    );
-    float bias2 = 0.005;
-    vec3 shadowCoord = (bias * vec4(shadowVertex, 1)).xyz;
+    vec3 shadowCoord = (shadowBias * vec4(shadowVertex, 1)).xyz;
     float visibility = 1.0f;
     for (int i = 0; i < 4; ++i){
         float shadowD;
         shadowD = texture(mTextures[S_SHADOW_MAP_0 + idx], shadowCoord.xy + poissonDisk[i] / 700.0).r;
 
-        if (shadowD < shadowCoord.z - bias2) {
+        if (shadowD < shadowCoord.z - shadowBias2) {
             visibility -= shadowHardness;
         }
     }
