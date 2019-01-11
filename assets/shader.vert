@@ -23,9 +23,11 @@ out vec3 mSourceNormal;
 out vec2 mSourceTexCoord;
 out vec3 mSourceTangent;
 out vec3 mSourceBitangent;
+out flat uint mDrawID;
 
 void main() {
     mat4 mModelMatrix = mModelMatrices[gl_DrawIDARB];
+    mDrawID = gl_DrawIDARB;
 
     mSourceVertex = (mModelMatrix * vec4(mVertex, 1.0)).xyz;
     mSourceNormal = mNormal;

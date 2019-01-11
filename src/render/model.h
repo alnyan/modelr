@@ -3,4 +3,5 @@
 
 struct Model {
     GLuint begin, size;
+    int materialIndex;
 };

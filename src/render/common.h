@@ -15,13 +15,17 @@
 #define S_UBO_SCENE             0
 #define S_UBO_TEXTURES          1
 #define S_UBO_LIGHT0            2
+#define S_UBO_MATERIALS         3
 
 #define S_SSBO_MODEL            1
 #define S_SSBO_MESH_ATTRIB      2
 
 #define S_TEXTURE_COUNT         256
+#define S_MATERIAL_COUNT        256
 #define S_SHADOW_CASCADES       4
+#define S_TEXTURE_MAX           (S_TEXTURE_COUNT - S_SHADOW_CASCADES - 1)
 #define S_SHADOW_MAP_0          (S_TEXTURE_COUNT - S_SHADOW_CASCADES)
+#define S_TEXTURE_UNDEFINED     (S_TEXTURE_MAX)
 
 #define textureIndex(i)         ((i) * 2)
 
@@ -42,6 +46,17 @@ struct SceneLight0UniformData {
     glm::vec4 m_lightPosition;
 };
 
+struct MaterialUniformData {
+    glm::vec4 m_Kd, m_Ka, m_Ks;
+    int m_maps[4];
+};
+
 struct MeshAttrib {
     int material;
+    int pad[3];
 };
+
+////
+
+// Important checks
+static_assert(sizeof(MaterialUniformData) % 16 == 0);

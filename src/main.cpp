@@ -9,6 +9,7 @@
 #include "gameobject.h"
 #include "fpscamera.h"
 #include "res/lodepng.h"
+#include <map>
 
 #include "render/meshobject.h"
 #include "render/wavefront.h"
@@ -28,14 +29,19 @@ static GLuint s_allGeometryArrayID;
 static GLuint s_modelMatrixBufferID,
               s_meshAttribBufferID,
               s_indirectCommandBufferID;
-static GLuint s_textureHandleBufferID;
-static GLuint s_textureIDs[2];
-static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
+
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
 static std::vector<MeshAttrib> s_meshAttribs;
 static MeshBuilder *s_allGeometryBuilder;
 static Model s_models[3];
+
+// Resources
+static GLuint s_textureHandleBufferID,
+              s_materialBufferID;
+static GLuint s_textureIDs[S_TEXTURE_COUNT];
+static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
+static MaterialUniformData s_materials[S_MATERIAL_COUNT];
 
 // Scene-global data
 static GLuint s_sceneUniformBufferID;
@@ -82,21 +88,105 @@ static int s_shadowControl = 0;
 
 //
 
-int loadTexture(GLuint id, const char *path) {
+static int s_lastTextureIndex = 0;
+static int s_lastMaterialIndex = 0;
+static std::map<std::string, int> s_materialBinding;
+static std::map<std::string, int> s_textureBindings;
+
+int loadTextureID(GLuint id, const std::string &path, GLuint minFilter = GL_LINEAR_MIPMAP_LINEAR, GLuint magFilter = GL_LINEAR) {
     unsigned int w, h;
     std::vector<unsigned char> data;
+
     if (lodepng::decode(data, w, h, path) != 0) {
-        std::cerr << "Failed to load textures" << std::endl;
+        std::cerr << "Failed to load texture: " << path << std::endl;
         return -1;
     }
 
     glBindTexture(GL_TEXTURE_2D, id);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[0]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
+    if (minFilter == GL_LINEAR_MIPMAP_LINEAR) {
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
     glBindTexture(GL_TEXTURE_2D, 0);
 
     return 0;
+}
+
+int loadTexture(int *i, const std::string &path) {
+    std::cout << "Load " << path;
+    auto it = s_textureBindings.find(path);
+    if (it != s_textureBindings.end()) {
+        if (i) {
+            *i = it->second;
+        }
+        std::cout << ": cached" << std::endl;
+        return 0;
+    } else {
+        int idx = s_lastTextureIndex++;
+        s_textureBindings[path] = idx;
+        if (idx >= S_TEXTURE_MAX) {
+            std::cerr << "No free texture IDs left" << std::endl;
+            return -1;
+        }
+        if (i) {
+            *i = idx;
+        }
+
+        if (loadTextureID(s_textureIDs[idx], path) != 0) {
+            std::cerr << ": failed" << std::endl;
+            return -1;
+        }
+
+        std::cout << ": index " << idx << ", ID " << s_textureIDs[idx] << std::endl;
+
+        return 0;
+    }
+}
+
+int createMaterial(const std::string &name) {
+    auto it = s_materialBinding.find(name);
+    if (it != s_materialBinding.end()) {
+        return it->second;
+    } else {
+        int idx = s_lastMaterialIndex++;
+        if (idx >= S_MATERIAL_COUNT) {
+            std::cerr << "Failed to allocate material" << std::endl;
+            return -1;
+        }
+
+        MaterialUniformData *mat = &s_materials[idx];
+        // Initial setup
+        mat->m_maps[1] = -1;
+        mat->m_maps[2] = -1;
+        mat->m_maps[0] = S_TEXTURE_UNDEFINED;
+
+        return idx;
+    }
+}
+
+int loadTextureMulti(int *indices, const std::list<std::string> &items) {
+    int n = items.size();
+    int i = 0;
+
+    for (const auto &path: items) {
+        if (loadTexture(&indices[i], path) != 0) {
+            return -1;
+        }
+        ++i;
+    }
+
+    return 0;
+}
+
+int getTexture(const std::string &name) {
+    auto it = s_textureBindings.find(name);
+    if (it != s_textureBindings.end()) {
+        return it->second;
+    } else {
+        return -1;
+    }
 }
 
 int loadData(void) {
@@ -111,11 +201,14 @@ int loadData(void) {
     Shader::addDefinition("S_UBO_SCENE", S_UBO_SCENE);
     Shader::addDefinition("S_UBO_TEXTURES", S_UBO_TEXTURES);
     Shader::addDefinition("S_UBO_LIGHT0", S_UBO_LIGHT0);
+    Shader::addDefinition("S_UBO_MATERIALS", S_UBO_MATERIALS);
     Shader::addDefinition("S_SSBO_MODEL", S_SSBO_MODEL);
     Shader::addDefinition("S_SSBO_MESH_ATTRIB", S_SSBO_MESH_ATTRIB);
     Shader::addDefinition("S_TEXTURE_COUNT", S_TEXTURE_COUNT);
     Shader::addDefinition("S_SHADOW_CASCADES", S_SHADOW_CASCADES);
     Shader::addDefinition("S_SHADOW_MAP_0", S_SHADOW_MAP_0);
+    Shader::addDefinition("S_TEXTURE_UNDEFINED", S_TEXTURE_UNDEFINED);
+    Shader::addDefinition("S_MATERIAL_COUNT", S_MATERIAL_COUNT);
 
     //
 
@@ -147,63 +240,47 @@ int loadData(void) {
         std::cerr << "Failed to load model" << std::endl;
         return -1;
     }
+
     s_allGeometryBuilder->commit();
+
+    glGenBuffers(1, &s_materialBufferID);
+    // Create materials for the two models
+    {
+        MaterialUniformData *mat;
+        int idx;
+        if ((idx = createMaterial("Material0")) < 0) {
+            std::cerr << "Failed to setup materials" << std::endl;
+            return -1;
+        }
+
+        mat = &s_materials[idx];
+        mat->m_maps[1] = getTexture("assets/normal.png");
+        mat->m_maps[0] = getTexture("assets/texture.png");          // TODO: use actual linking
+
+        if ((idx = createMaterial("Material1")) < 0) {
+            std::cerr << "Failed to setup materials" << std::endl;
+            return -1;
+        }
+
+        mat = &s_materials[idx];
+        // LOL
+        mat->m_maps[1] = getTexture("assets/terrain.png");
+        mat->m_maps[0] = getTexture("assets/terrain.png");
+
+        s_models[0].materialIndex = idx - 1;
+        s_models[1].materialIndex = idx;             // No material, testing purposes
+    }
+
+    glBindBuffer(GL_UNIFORM_BUFFER, s_materialBufferID);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(s_materials), &s_materials, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_MATERIALS, s_materialBufferID);
 
     std::cout << "Loading complete" << std::endl;
     return 0;
 }
 
-int init(void) {
-    s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
-    s_sceneUniformData.m_cameraDestination = glm::vec4(2, 2, 3, 1);
-
-    // Setup drawcalls
-    s_indirectCommands.push_back({ s_models[1].size, 1, s_models[1].begin, 0 });
-    s_modelMatrices.push_back(glm::mat4(1));
-    s_meshAttribs.push_back({ 0 });
-
-    for (int i = -24; i <= 6; ++i) {
-        for (int j = -24; j <= 6; ++j) {
-            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
-            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
-            s_meshAttribs.push_back({ 0 });
-        }
-    }
-    for (int i = -5; i <= 5; ++i) {
-        for (int j = 1; j <= 3; ++j) {
-            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
-            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, 4)));
-            s_meshAttribs.push_back({ 0 });
-        }
-    }
-    for (int i = -5; i <= 5; ++i) {
-        for (int j = 1; j <= 3; ++j) {
-            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
-            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, -4)));
-            s_meshAttribs.push_back({ 0 });
-        }
-    }
-
-    glNamedBufferData(s_indirectCommandBufferID, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
-    glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_STATIC_DRAW);
-    glNamedBufferData(s_meshAttribBufferID, s_meshAttribs.size() * sizeof(glm::mat4), &s_meshAttribs[0], GL_STATIC_DRAW);
-
-    return 0;
-}
-
 int loadTextures(void) {
-    const char *textures[] = {
-        "assets/texture.png",
-        "assets/normal.png",
-    };
-
-    glGenTextures(sizeof(textures) / sizeof(textures[0]), s_textureIDs);
-
-    for (int i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i) {
-        if (loadTexture(s_textureIDs[i], textures[i]) != 0) {
-            return -1;
-        }
-    }
     int e;
     for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         std::cout << "Shadow map " << i << ": " << s_light0DepthTextureIDs[i] << std::endl;
@@ -218,18 +295,51 @@ int loadTextures(void) {
             return -1;
         }
     }
-    for (int i = 0; i < sizeof(textures) / sizeof(textures[0]); ++i) {
-        s_textureHandles[textureIndex(i)] = glGetTextureHandleARB(s_textureIDs[i]);
+
+    GLuint undefinedTextureID;
+    glGenTextures(1, &undefinedTextureID);
+
+    if (loadTextureID(undefinedTextureID, "assets/undefined.png", GL_NEAREST, GL_NEAREST) != 0) {
+        std::cout << "Failed to load \"undefined\"" << std::endl;
+        return -1;
+    }
+
+    GLuint undefinedTextureHandle = glGetTextureHandleARB(undefinedTextureID);
+    if (glGetError()) {
+        std::cerr << "Failed to get undefined texture handle" << std::endl;
+        return -1;
+    }
+    glMakeTextureHandleResidentARB(undefinedTextureHandle);
+    s_textureHandles[textureIndex(S_TEXTURE_UNDEFINED)] = undefinedTextureHandle;
+
+    glGenTextures(3, s_textureIDs);
+    std::list<std::string> textures {
+        "assets/texture.png",
+        "assets/normal.png",
+        "assets/terrain.png"
+    };
+    int *indices = new int[3];
+
+    if (loadTextureMulti(indices, textures) != 0) {
+        delete indices;
+        return -1;
+    }
+
+    for (int j = 0; j < 3; ++j) {
+        int i = indices[j];
+        GLuint texID = s_textureIDs[i];
+        GLuint texHandle = glGetTextureHandleARB(texID);
         if ((e = glGetError())) {
             std::cerr << "Failed to get texture handle for " << i << std::endl;
             return -1;
         }
-        glMakeTextureHandleResidentARB(s_textureHandles[textureIndex(i)]);
-        if (glGetError()) {
-            std::cerr << "Failed to make texture handle resident for " << i << std::endl;
-            return -1;
-        }
+
+        glMakeTextureHandleResidentARB(texHandle);
+
+        s_textureHandles[textureIndex(i)] = texHandle;
     }
+
+    delete indices;
 
     glGenBuffers(1, &s_textureHandleBufferID);
 
@@ -240,6 +350,45 @@ int loadTextures(void) {
 
     return 0;
 }
+
+int init(void) {
+    s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
+    s_sceneUniformData.m_cameraDestination = glm::vec4(2, 2, 3, 1);
+
+    // Setup drawcalls
+    s_indirectCommands.push_back({ s_models[1].size, 1, s_models[1].begin, 0 });
+    s_modelMatrices.push_back(glm::mat4(1));
+    s_meshAttribs.push_back({ s_models[1].materialIndex });
+
+    for (int i = -24; i <= 6; ++i) {
+        for (int j = -24; j <= 6; ++j) {
+            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
+            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
+            s_meshAttribs.push_back({ s_models[0].materialIndex });
+        }
+    }
+    for (int i = -5; i <= 5; ++i) {
+        for (int j = 1; j <= 3; ++j) {
+            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
+            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, 4)));
+            s_meshAttribs.push_back({ s_models[0].materialIndex });
+        }
+    }
+    for (int i = -5; i <= 5; ++i) {
+        for (int j = 1; j <= 3; ++j) {
+            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
+            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, -4)));
+            s_meshAttribs.push_back({ s_models[0].materialIndex });
+        }
+    }
+
+    glNamedBufferData(s_indirectCommandBufferID, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
+    glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_STATIC_DRAW);
+    glNamedBufferData(s_meshAttribBufferID, s_meshAttribs.size() * sizeof(MeshAttrib), &s_meshAttribs[0], GL_STATIC_DRAW);
+
+    return 0;
+}
+
 
 int setup_gl(void) {
     glEnable(GL_DEPTH_TEST);
@@ -315,9 +464,9 @@ int setup_gl(void) {
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
     glBufferData(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL, s_modelMatrixBufferID);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB, s_meshAttribBufferID);
-
 
     // Scene buffer
     glGenBuffers(1, &s_sceneUniformBufferID);
@@ -609,7 +758,7 @@ int main() {
 
     glfwSwapInterval(1);
 
-    if (loadData() != 0 || setup_gl() != 0 || init() != 0) {
+    if (setup_gl() != 0 || loadData() != 0 || init() != 0) {
         glfwTerminate();
         return -1;
     }

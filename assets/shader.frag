@@ -1,12 +1,42 @@
 #version 430 core
 #extension GL_ARB_bindless_texture : require
 
+struct Material {
+    vec4 m_Kd;
+    vec4 m_Ka;
+    vec4 m_Ks;
+    ivec4 m_maps;
+};
+
+struct MeshAttrib {
+    int mMaterialIndex;
+    int pad[3];
+};
+
+struct LightParams {
+    vec4 mLightPos;
+    vec3 mLightColor;
+    float mLightIntensity;
+};
+
+////
+
 const float cascades[S_SHADOW_CASCADES] = {
     15,
     35,
     75,
     95
 };
+
+//const Material noMaterial = {
+    //vec3(1, 0, 0),
+    //vec3(1, 0, 0),
+    //vec3(1, 0, 0),
+    //100,
+    //0,
+    //-1, -1,
+    //{ 1, 1, 1 }
+//};
 
 ////
 
@@ -15,6 +45,7 @@ in vec3 mSourceNormal;
 in vec2 mSourceTexCoord;
 in vec3 mSourceTangent;
 in vec3 mSourceBitangent;
+in flat uint mDrawID;
 
 // UBOs: View-Projection matrix and camera params + textures
 layout(std140,binding=S_UBO_SCENE) uniform mSceneParams {
@@ -34,6 +65,10 @@ layout(std140,binding=S_UBO_LIGHT0) uniform mLight0Buffer {
     vec4 mLight0Pos;
 };
 
+layout(std140,binding=S_UBO_MATERIALS) uniform mMaterialBuffer {
+    Material mMaterials[S_MATERIAL_COUNT];
+};
+
 //
 
 // Model parameter SSBOs
@@ -41,37 +76,12 @@ layout(std430, binding=S_SSBO_MODEL) buffer mModelParams {
     mat4 mModelMatrices[];
 };
 
-layout(std430, binding=S_SSBO_MESH_ATTRIB) buffer mMeshAttribs {
-    int mMeshMaterials[];
+layout(std430, binding=S_SSBO_MESH_ATTRIB) buffer mMeshAttribBuffer {
+    MeshAttrib mMeshAttribs[];
 };
 //
 
 layout(location = 0) out vec3 color;
-
-// TODO: upload this from CPU, not hardcode
-struct MeshMaterial {
-    vec3 m_Kd;
-    vec3 m_Ka;
-    vec3 m_Ks;
-    float m_Ns;
-    int m_Matopt;
-};
-
-struct LightParams {
-    vec4 mLightPos;
-    vec3 mLightColor;
-    float mLightIntensity;
-};
-
-const MeshMaterial mMaterials[1] = {
-    {
-        vec3(0, 1, 0),
-        vec3(0.1, 0.1, 0.1),
-        vec3(1, 1, 1),
-        100,
-        0
-    }
-};
 
 LightParams mLights[1] = {
     // Sunlight
@@ -80,15 +90,10 @@ LightParams mLights[1] = {
         vec3(0.5, 1, 1),
         1
     }
-    //{
-        //vec3(-3, 2, -3),
-        //vec3(1, 0.7, 0.5),
-        //10
-    //}
 };
 
 // Hardcoded params (yet)
-const float ambientIntensity = 0.2f;
+const float ambientIntensity = 0.2;
 
 const vec3 fogColor = vec3(0, 0.25, 0.25);
 const float fogDensity = 0.05;
@@ -193,17 +198,38 @@ void main() {
     }
 
     // Post-shadow
-    MeshMaterial mat = mMaterials[mMeshMaterials[0]];
-    vec3 baseKd = texture(mTextures[0], mSourceTexCoord).rgb;
-    vec3 mapNormal = normalize(texture(mTextures[1], mSourceTexCoord).rgb * 2.0 - vec3(1.0));
+    int matIndex = mMeshAttribs[mDrawID].mMaterialIndex;
+    int m_map_Kd = S_TEXTURE_UNDEFINED;
+    int m_map_Bump = -1;
 
-    mat3 matTBN = transpose(mat3(
-        normalize(mSourceTangent),
-        normalize(mSourceBitangent),
-        normalize(mSourceNormal)
-    ));
+    if (matIndex >= 0) {
+        m_map_Kd = mMaterials[matIndex].m_maps.x;
+        if (m_map_Kd < 0) {
+            m_map_Kd = S_TEXTURE_UNDEFINED;
+        }
+        m_map_Bump = mMaterials[matIndex].m_maps.y;
+    }
 
-    color = baseKd * ambientIntensity; // TODO: ambient
+    vec3 baseKd;
+    vec3 mapNormal;
+    mat3 matTBN;
+
+    baseKd = texture(mTextures[m_map_Kd], mSourceTexCoord).rgb;
+
+    if (m_map_Bump >= 0) {
+        mapNormal = normalize(texture(mTextures[m_map_Bump], mSourceTexCoord).rgb * 2.0 - vec3(1.0));
+
+        matTBN = transpose(mat3(
+            normalize(mSourceTangent),
+            normalize(mSourceBitangent),
+            normalize(mSourceNormal)
+        ));
+    } else {
+        mapNormal = mSourceNormal;
+        matTBN = mat3(1);
+    }
+
+    color = baseKd * ambientIntensity;
     vec3 eyeDir = normalize(matTBN * (-(mCameraDestination - mCameraPosition)).xyz);
 
     for (int i = 0; i < mLights.length(); ++i) {
