@@ -1,9 +1,6 @@
 #version 430 core
 #extension GL_ARB_bindless_texture : require
 
-#define S_TEXTURE_COUNT     256
-#define S_SHADOW_MAP_0      (S_TEXTURE_COUNT - 4)
-
 ////
 
 in vec3 mSourceVertex;
@@ -13,19 +10,19 @@ in vec3 mSourceTangent;
 in vec3 mSourceBitangent;
 
 // UBOs: View-Projection matrix and camera params + textures
-layout(std140,binding=0) uniform mSceneParams {
+layout(std140,binding=S_UBO_SCENE) uniform mSceneParams {
     mat4 mProjectionMatrix;
     mat4 mCameraMatrix;
     vec4 mCameraPosition;
     vec4 mCameraDestination;
 };
 
-layout(std140,binding=1) uniform mSamplerBuffer {
+layout(std140,binding=S_UBO_TEXTURES) uniform mSamplerBuffer {
     sampler2D mTextures[S_TEXTURE_COUNT];
 };
 
-layout(std140,binding=2) uniform mLight0Buffer {
-    mat4 mLightProjection[4];
+layout(std140,binding=S_UBO_LIGHT0) uniform mLight0Buffer {
+    mat4 mLightProjection[S_SHADOW_CASCADES];
     mat4 mLightMatrix;
     vec4 mLight0Pos;
 };
@@ -33,11 +30,11 @@ layout(std140,binding=2) uniform mLight0Buffer {
 //
 
 // Model parameter SSBOs
-layout(std430,binding=1) buffer mModelParams {
+layout(std430, binding=S_SSBO_MODEL) buffer mModelParams {
     mat4 mModelMatrices[];
 };
 
-layout(std430,binding=2) buffer mMeshAttribs {
+layout(std430, binding=S_SSBO_MESH_ATTRIB) buffer mMeshAttribs {
     int mMeshMaterials[];
 };
 //
@@ -178,20 +175,13 @@ void main() {
     float visibility = 1.0f;
 
     vec3 vertexD = mCameraPosition.xyz - mSourceVertex;
-    float cascades[] = {
+    float cascades[S_SHADOW_CASCADES] = {
         15,
         35,
         75,
         95
     };
-    vec3 cascadeColors[] = {
-        vec3(1, 0, 0),
-        vec3(1, 1, 0),
-        vec3(0, 1, 0),
-        vec3(0, 0, 1)
-    };
-
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         if (abs(vertexD.x) < cascades[i] &&
             abs(vertexD.y) < cascades[i] &&
             abs(vertexD.z) < cascades[i]) {

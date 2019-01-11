@@ -1,15 +1,27 @@
 #include "shader.h"
 #include "../res/assets.h"
 #include <stdarg.h>
+#include <string.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <list>
+#include <map>
+
+static std::map<std::string, std::string> s_shaderDefinitions {
+    { "SHADER_PROCESSED", "1" }
+};
+
+void Shader::addDefinition(const std::string &name, const std::string &value) {
+    s_shaderDefinitions[name] = value;
+}
 
 bool Shader::loadShader(GLenum type, const char *path, GLuint &shaderID) {
     std::cout << "Load shader " << path << std::endl;
 
     std::string shaderCode;
+    std::stringstream shaderBuilder;
     std::ifstream file(Assets::getShaderPath(path));
     const char *shaderCodePtr;
     GLint status, errorLength;
@@ -18,12 +30,27 @@ bool Shader::loadShader(GLenum type, const char *path, GLuint &shaderID) {
         return false;
     }
 
-    shaderCode = std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     shaderID = glCreateShader(type);
 
     if (!shaderID) {
         return false;
     }
+
+    std::string line;
+    bool dirsInserted = false;
+    while (std::getline(file, line)) {
+        shaderBuilder << line << "\n";
+        if (!dirsInserted &&
+            !line.empty() &&
+            !strncmp(line.c_str(), "#version ", 9)) {
+            for (const auto &[name, value]: s_shaderDefinitions) {
+                shaderBuilder << "#define " << name << " " << value << "\n";
+            }
+            dirsInserted = true;
+        }
+    }
+
+    shaderCode = shaderBuilder.str();
 
     shaderCodePtr = shaderCode.c_str();
     glShaderSource(shaderID, 1, &shaderCodePtr, NULL);

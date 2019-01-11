@@ -1,7 +1,13 @@
 #pragma once
 #include <GL/glew.h>
+#include <string>
 
 namespace Shader {
+
+    void addDefinition(const std::string &name, const std::string &value);
+    template<typename T> void addDefinition(const std::string &name, T v) {
+        addDefinition(name, std::to_string(v));
+    }
 
     /**
      * @brief Compiles and links shader program

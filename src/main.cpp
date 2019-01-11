@@ -2,11 +2,11 @@
 #include <math.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include "render/common.h"
 #include "render/shader.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
-//#include "scene.h"
 #include "fpscamera.h"
 #include "res/lodepng.h"
 
@@ -17,37 +17,10 @@
 
 //
 
-#define R_SHADOW_MAP_WIDTH      4096
-#define R_SHADOW_MAP_HEIGHT     4096
-#define S_TEXTURE_COUNT         256
-#define S_SHADOW_MAP_0          (S_TEXTURE_COUNT - 4)
-#define textureIndex(i)         ((i) * 2)
-
 static GLFWwindow *s_window;
 
 static constexpr float s_moveSpeed = 5;
 static int m_width, m_height;
-
-struct DrawArraysIndirectCommand {
-    GLuint count, instanceCount, first, baseInstance;
-};
-
-struct SceneUniformData {
-    glm::mat4 m_projectionMatrix;
-    glm::mat4 m_cameraMatrix;
-    glm::vec4 m_cameraPosition;
-    glm::vec4 m_cameraDestination;
-};
-
-struct SceneLight0UniformData {
-    glm::mat4 m_projectionMatrix[4];
-    glm::mat4 m_lightMatrix;
-    glm::vec4 m_lightPosition;
-};
-
-struct MeshAttrib {
-    int material;
-};
 
 // Dynamic objects
 static GLuint s_sceneShaderID;
@@ -96,7 +69,7 @@ static GLuint s_screenShaderID;
 
 // Lighting
 static GLuint s_light0FramebufferID;
-static GLuint s_light0DepthTextureIDs[4];
+static GLuint s_light0DepthTextureIDs[S_SHADOW_CASCADES];
 static GLuint s_depthShaderID;
 static SceneLight0UniformData s_light0UniformData {
     {},
@@ -129,6 +102,23 @@ int loadTexture(GLuint id, const char *path) {
 int loadData(void) {
     std::cout << "Loading data" << std::endl;
 
+    // Prepare shader defines
+    Shader::addDefinition("S_ATTRIB_VERTEX", S_ATTRIB_VERTEX);
+    Shader::addDefinition("S_ATTRIB_TEXCOORD", S_ATTRIB_TEXCOORD);
+    Shader::addDefinition("S_ATTRIB_NORMAL", S_ATTRIB_NORMAL);
+    Shader::addDefinition("S_ATTRIB_TANGENT", S_ATTRIB_TANGENT);
+    Shader::addDefinition("S_ATTRIB_BITANGENT", S_ATTRIB_BITANGENT);
+    Shader::addDefinition("S_UBO_SCENE", S_UBO_SCENE);
+    Shader::addDefinition("S_UBO_TEXTURES", S_UBO_TEXTURES);
+    Shader::addDefinition("S_UBO_LIGHT0", S_UBO_LIGHT0);
+    Shader::addDefinition("S_SSBO_MODEL", S_SSBO_MODEL);
+    Shader::addDefinition("S_SSBO_MESH_ATTRIB", S_SSBO_MESH_ATTRIB);
+    Shader::addDefinition("S_TEXTURE_COUNT", S_TEXTURE_COUNT);
+    Shader::addDefinition("S_SHADOW_CASCADES", S_SHADOW_CASCADES);
+    Shader::addDefinition("S_SHADOW_MAP_0", S_SHADOW_MAP_0);
+
+    //
+
     if (!Shader::loadProgram(s_sceneShaderID, 2, GL_VERTEX_SHADER, "shader.vert", GL_FRAGMENT_SHADER, "shader.frag")) {
         std::cerr << "Failed to load shaders" << std::endl;
         return -1;
@@ -143,7 +133,6 @@ int loadData(void) {
         std::cerr << "Failed to load screen shader" << std::endl;
         return -1;
     }
-
 
     glGenVertexArrays(1, &s_allGeometryArrayID);
     s_allGeometryBuilder = new MeshBuilder(s_allGeometryArrayID);
@@ -216,7 +205,7 @@ int loadTextures(void) {
         }
     }
     int e;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         std::cout << "Shadow map " << i << ": " << s_light0DepthTextureIDs[i] << std::endl;
         s_textureHandles[textureIndex(i + S_SHADOW_MAP_0)] = glGetTextureHandleARB(s_light0DepthTextureIDs[i]);
         if (glGetError()) {
@@ -247,7 +236,7 @@ int loadTextures(void) {
     glBindBuffer(GL_UNIFORM_BUFFER, s_textureHandleBufferID);
     glBufferData(GL_UNIFORM_BUFFER, sizeof(s_textureHandles), s_textureHandles, GL_STATIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, s_textureHandleBufferID);
+    glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_TEXTURES, s_textureHandleBufferID);
 
     return 0;
 }
@@ -284,8 +273,8 @@ int setup_gl(void) {
     glBindVertexArray(s_screenArrayID);
     glBindBuffer(GL_ARRAY_BUFFER, s_screenBufferID);
     glBufferData(GL_ARRAY_BUFFER, sizeof(s_screenQuadData), s_screenQuadData, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, 0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, (GLvoid *) (sizeof(GLfloat) * 3));
+    glVertexAttribPointer(S_ATTRIB_VERTEX, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, 0);
+    glVertexAttribPointer(S_ATTRIB_TEXCOORD, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, (GLvoid *) (sizeof(GLfloat) * 3));
     glBindVertexArray(0);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -295,8 +284,8 @@ int setup_gl(void) {
 
     // Light framebuffer setup
     glGenFramebuffers(1, &s_light0FramebufferID);
-    glGenTextures(4, s_light0DepthTextureIDs);
-    for (int i = 0; i < 4; ++i) {
+    glGenTextures(S_SHADOW_CASCADES, s_light0DepthTextureIDs);
+    for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[i]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -326,8 +315,8 @@ int setup_gl(void) {
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
     glBufferData(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, s_modelMatrixBufferID);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, s_meshAttribBufferID);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL, s_modelMatrixBufferID);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB, s_meshAttribBufferID);
 
 
     // Scene buffer
@@ -348,8 +337,8 @@ int setup_gl(void) {
         return -1;
     }
 
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, s_sceneUniformBufferID);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 2, s_sceneLight0UniformBufferID);
+    glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_SCENE, s_sceneUniformBufferID);
+    glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_LIGHT0, s_sceneLight0UniformBufferID);
 
     s_lastTime = glfwGetTime();
 
@@ -394,14 +383,14 @@ void updateLight0(double t) {
         );
 
         auto lightP = s_light0UniformData.m_lightMatrix * glm::vec4(glm::vec3(s_sceneUniformData.m_cameraPosition), 1);
-        float cascades[] {
+        float cascades[S_SHADOW_CASCADES] {
             20,
             40,
             80,
             100
         };
 
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
             s_light0UniformData.m_projectionMatrix[i] = glm::ortho(
                 lightP.x - cascades[i],
                 lightP.x + cascades[i],
@@ -427,7 +416,6 @@ void renderScene(void) {
     glViewport(0, 0, m_width, m_height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(s_sceneShaderID);
-
 
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 
@@ -460,11 +448,11 @@ void renderScreen(void) {
         glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[s_viewType - 1]);
 
     glBindVertexArray(s_screenArrayID);
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(S_ATTRIB_VERTEX);
+    glEnableVertexAttribArray(S_ATTRIB_TEXCOORD);
     glDrawArrays(GL_TRIANGLES, 0, 6);
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(1);
+    glDisableVertexAttribArray(S_ATTRIB_TEXCOORD);
+    glDisableVertexAttribArray(S_ATTRIB_VERTEX);
     glBindVertexArray(0);
 }
 
@@ -483,18 +471,18 @@ void render(void) {
 
     glBindVertexArray(s_allGeometryArrayID);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-    glEnableVertexAttribArray(3);
-    glEnableVertexAttribArray(4);
+    glEnableVertexAttribArray(S_ATTRIB_VERTEX);
+    glEnableVertexAttribArray(S_ATTRIB_TEXCOORD);
+    glEnableVertexAttribArray(S_ATTRIB_NORMAL);
+    glEnableVertexAttribArray(S_ATTRIB_TANGENT);
+    glEnableVertexAttribArray(S_ATTRIB_BITANGENT);
 
     // BEGIN RENDER
     // BLAST 1: LIGHT'S ORTHO
     glUseProgram(s_depthShaderID);
     glCullFace(GL_FRONT);
     glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         renderLight0(i);
     }
     glCullFace(GL_BACK);
@@ -507,11 +495,11 @@ void render(void) {
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
     glBindVertexArray(0);
 
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(1);
-    glDisableVertexAttribArray(2);
-    glDisableVertexAttribArray(3);
-    glDisableVertexAttribArray(4);
+    glDisableVertexAttribArray(S_ATTRIB_BITANGENT);
+    glDisableVertexAttribArray(S_ATTRIB_TANGENT);
+    glDisableVertexAttribArray(S_ATTRIB_NORMAL);
+    glDisableVertexAttribArray(S_ATTRIB_TEXCOORD);
+    glDisableVertexAttribArray(S_ATTRIB_VERTEX);
 
     glUseProgram(0);
 

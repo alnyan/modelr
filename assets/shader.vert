@@ -1,20 +1,20 @@
 #version 430 core
 #extension GL_ARB_shader_draw_parameters : enable
 
-layout(location = 0) in vec3 mVertex;
-layout(location = 1) in vec2 mTexCoord;
-layout(location = 2) in vec3 mNormal;
-layout(location = 3) in vec3 mTangent;
-layout(location = 4) in vec3 mBitangent;
+layout(location=S_ATTRIB_VERTEX) in vec3 mVertex;
+layout(location=S_ATTRIB_TEXCOORD) in vec2 mTexCoord;
+layout(location=S_ATTRIB_NORMAL) in vec3 mNormal;
+layout(location=S_ATTRIB_TANGENT) in vec3 mTangent;
+layout(location=S_ATTRIB_BITANGENT) in vec3 mBitangent;
 
-layout(std140,binding=0) uniform mSceneParams {
+layout(std140, binding=S_UBO_SCENE) uniform mSceneParams {
     mat4 mProjectionMatrix;
     mat4 mCameraMatrix;
     vec4 mCameraPosition;
     vec4 mCameraDestination;
 };
 
-layout(std430,binding=1) buffer mModelParams {
+layout(std430, binding=S_SSBO_MODEL) buffer mModelParams {
     mat4 mModelMatrices[];
 };
 
