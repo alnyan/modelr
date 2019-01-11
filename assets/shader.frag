@@ -1,6 +1,13 @@
 #version 430 core
 #extension GL_ARB_bindless_texture : require
 
+const float cascades[S_SHADOW_CASCADES] = {
+    15,
+    35,
+    75,
+    95
+};
+
 ////
 
 in vec3 mSourceVertex;
@@ -174,13 +181,8 @@ float shadowFactor(int idx) {
 void main() {
     float visibility = 1.0f;
 
-    vec3 vertexD = mCameraPosition.xyz - mSourceVertex;
-    float cascades[S_SHADOW_CASCADES] = {
-        15,
-        35,
-        75,
-        95
-    };
+    vec3 vertexD = (mLightMatrix * mCameraPosition).xyz - (mLightMatrix * vec4(mSourceVertex, 1)).xyz;
+
     for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         if (abs(vertexD.x) < cascades[i] &&
             abs(vertexD.y) < cascades[i] &&
