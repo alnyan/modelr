@@ -158,9 +158,10 @@ int createMaterial(const std::string &name) {
 
         MaterialUniformData *mat = &s_materials[idx];
         // Initial setup
-        mat->m_maps[1] = -1;
-        mat->m_maps[2] = -1;
+        mat->m_maps[1] = S_TEXTURE_UNDEFINED;
+        mat->m_maps[2] = S_TEXTURE_UNDEFINED;
         mat->m_maps[0] = S_TEXTURE_UNDEFINED;
+        mat->m_Ks = glm::vec4(0.2, 0.2, 0.2, 100);
 
         return idx;
     }

@@ -28,16 +28,6 @@ const float cascades[S_SHADOW_CASCADES] = {
     95
 };
 
-//const Material noMaterial = {
-    //vec3(1, 0, 0),
-    //vec3(1, 0, 0),
-    //vec3(1, 0, 0),
-    //100,
-    //0,
-    //-1, -1,
-    //{ 1, 1, 1 }
-//};
-
 ////
 
 in vec3 mSourceVertex;
@@ -115,13 +105,14 @@ vec3 funSpecularPoint(vec3 lightDir,
                  float lightDist,
                  vec3 lightColor,
                  float lightIntensity,
+                 float specularExp,
                  vec3 normal,
                  vec3 eyeDir) {
     vec3 rayReflect = normalize(reflect(-lightDir, normal));
 
     float cosAlpha = clamp(dot(rayReflect, eyeDir), 0, 1);
 
-    return lightIntensity * lightColor * pow(cosAlpha, 4) / pow(lightDist, 2);
+    return lightIntensity * lightColor * pow(cosAlpha, specularExp) / pow(lightDist, 2);
 }
 
 ////
@@ -139,13 +130,14 @@ vec3 funDiffuseDir(vec3 inKd,
 vec3 funSpecularDir(vec3 lightDir,
                    vec3 lightColor,
                    float lightIntensity,
+                   float specularExp,
                    vec3 normal,
                    vec3 eyeDir) {
     vec3 rayReflect = normalize(reflect(-lightDir, normal));
 
     float cosAlpha = clamp(dot(rayReflect, eyeDir), 0, 1);
 
-    return lightIntensity * lightColor * pow(cosAlpha, 4);
+    return lightIntensity * lightColor * pow(cosAlpha, specularExp);
 }
 
 ////
@@ -201,6 +193,7 @@ void main() {
     int matIndex = mMeshAttribs[mDrawID].mMaterialIndex;
     int m_map_Kd = S_TEXTURE_UNDEFINED;
     int m_map_Bump = -1;
+    float m_Ns = 100;
 
     if (matIndex >= 0) {
         m_map_Kd = mMaterials[matIndex].m_maps.x;
@@ -208,6 +201,8 @@ void main() {
             m_map_Kd = S_TEXTURE_UNDEFINED;
         }
         m_map_Bump = mMaterials[matIndex].m_maps.y;
+
+        m_Ns = mMaterials[matIndex].m_Ks.w;
     }
 
     vec3 baseKd;
@@ -236,11 +231,11 @@ void main() {
         if (mLights[i].mLightPos.w > 0.5) {
             vec3 lightDir = matTBN * (mLights[i].mLightPos.xyz - mSourceVertex);
             color += visibility * funDiffusePoint(baseKd, normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal);
-            color += visibility * funSpecularPoint(normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal, eyeDir);
+            color += visibility * funSpecularPoint(normalize(lightDir), length(lightDir), mLights[i].mLightColor, mLights[i].mLightIntensity, m_Ns, mapNormal, eyeDir);
         } else {
             vec3 lightDir = matTBN * normalize(-mLights[i].mLightPos.xyz);
             color += visibility * funDiffuseDir(baseKd, lightDir, mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal);
-            color += visibility * funSpecularDir(lightDir, mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal, eyeDir);
+            color += visibility * funSpecularDir(lightDir, mLights[i].mLightColor, mLights[i].mLightIntensity, m_Ns, mapNormal, eyeDir);
         }
     }
 }
