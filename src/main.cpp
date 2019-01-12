@@ -29,6 +29,7 @@ static GLuint s_allGeometryArrayID;
 static GLuint s_modelMatrixBufferID,
               s_meshAttribBufferID,
               s_indirectCommandBufferID;
+static GLuint s_sceneBillboardShaderID;
 
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
@@ -76,7 +77,7 @@ static GLuint s_screenShaderID;
 // Lighting
 static GLuint s_light0FramebufferID;
 static GLuint s_light0DepthTextureIDs[S_SHADOW_CASCADES];
-static GLuint s_depthShaderID;
+static GLuint s_depthShaderID, s_billboardDepthShaderID;
 static SceneLight0UniformData s_light0UniformData {
     {},
     {},
@@ -214,6 +215,16 @@ int loadData(void) {
     //
 
     if (!Shader::loadProgram(s_sceneShaderID, 2, GL_VERTEX_SHADER, "shader.vert", GL_FRAGMENT_SHADER, "shader.frag")) {
+        std::cerr << "Failed to load shaders" << std::endl;
+        return -1;
+    }
+
+    if (!Shader::loadProgram(s_sceneBillboardShaderID, 2, GL_VERTEX_SHADER, "billboard.vert", GL_FRAGMENT_SHADER, "billboard.frag")) {
+        std::cerr << "Failed to load shaders" << std::endl;
+        return -1;
+    }
+
+    if (!Shader::loadProgram(s_billboardDepthShaderID, 2, GL_VERTEX_SHADER, "billboard-depth.vert", GL_FRAGMENT_SHADER, "depth.frag")) {
         std::cerr << "Failed to load shaders" << std::endl;
         return -1;
     }
@@ -561,6 +572,14 @@ void update(double t, double dt) {
 
 ////
 
+void drawBillboard(Model *m, float x, float y, float z) {
+    glm::mat4 model = glm::translate(glm::mat4(1), {x, y, z});
+    auto l = glGetUniformLocation(s_sceneBillboardShaderID, "mModelMatrix");
+    glUniformMatrix4fv(l, 1, GL_FALSE, &model[0][0]);
+
+    glDrawArrays(GL_TRIANGLES, m->begin, m->size);
+}
+
 void renderScene(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
     glViewport(0, 0, m_width, m_height);
@@ -569,6 +588,12 @@ void renderScene(void) {
 
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 
+    glUseProgram(s_sceneBillboardShaderID);
+
+    for (int i = 0; i < 100; ++i) {
+        drawBillboard(&s_models[0], glm::cos(glfwGetTime()) * i, 10 + glm::sin(glfwGetTime() + (i * M_PI) / 4), glm::sin(glfwGetTime()) * i);
+    }
+
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
@@ -576,11 +601,19 @@ void renderLight0(int i) {
     glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureIDs[i], 0);
     glViewport(0, 0, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT);
     glClear(GL_DEPTH_BUFFER_BIT);
+    glUseProgram(s_depthShaderID);
 
     auto l = glGetUniformLocation(s_depthShaderID, "mRenderCascade");
     glUniform1i(l, i);
 
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
+
+    glUseProgram(s_billboardDepthShaderID);
+    l = glGetUniformLocation(s_billboardDepthShaderID, "mRenderCascade");
+    glUniform1i(l, i);
+    for (int i = 0; i < 100; ++i) {
+        drawBillboard(&s_models[0], glm::cos(glfwGetTime()) * i, 10 + glm::sin(glfwGetTime() + (i * M_PI) / 4), glm::sin(glfwGetTime()) * i);
+    }
 }
 
 void renderScreen(void) {
@@ -629,7 +662,6 @@ void render(void) {
 
     // BEGIN RENDER
     // BLAST 1: LIGHT'S ORTHO
-    glUseProgram(s_depthShaderID);
     glCullFace(GL_FRONT);
     glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
     for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
