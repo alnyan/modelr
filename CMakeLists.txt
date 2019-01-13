@@ -15,14 +15,9 @@ set(SOURCES src/main.cpp
             src/render/meshbuilder.cpp
             src/render/wavefront.cpp
             src/render/shader.cpp
-            #src/render/texture.cpp
             src/res/lodepng.cpp
-            #src/render/material.cpp
             src/gameobject.cpp
-            #src/scene.cpp
-            src/res/assets.cpp
-            src/render/meshobject.cpp
-            src/fpscamera.cpp)
+            src/res/assets.cpp)
 configure_file(src/config.h.in ${CMAKE_BINARY_DIR}/config.h)
 
 include_directories(${INCLUDE_DIRS} ${CMAKE_BINARY_DIR})

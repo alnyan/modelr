@@ -7,12 +7,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
-#include "fpscamera.h"
 #include "res/lodepng.h"
 #include <algorithm>
+#include <list>
 #include <map>
 
-#include "render/meshobject.h"
 #include "render/wavefront.h"
 
 #include "config.h"
@@ -36,6 +35,8 @@ static GLuint s_sceneBillboardShaderID;
 static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
 static std::vector<glm::mat4> s_modelMatrices;
 static std::vector<MeshAttrib> s_meshAttribs;
+static std::vector<GameObject> s_objects;
+
 static MeshBuilder *s_allGeometryBuilder;
 static Model s_models[3];
 
@@ -372,6 +373,19 @@ int loadTextures(void) {
     return 0;
 }
 
+void addObject(int modelID, glm::vec3 pos, glm::vec3 vel) {
+    int index = s_indirectCommands.size();
+    s_indirectCommands.push_back({ s_models[modelID].size, 1, s_models[modelID].begin, 0 });
+    s_meshAttribs.push_back({ s_models[modelID].materialIndex });
+    s_modelMatrices.push_back(glm::mat4(1));
+
+    s_objects.push_back({
+        pos,
+        vel,
+        index
+    });
+}
+
 int init(void) {
     s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
     s_sceneUniformData.m_cameraDestination = glm::vec4(2, 2, 3, 1);
@@ -381,27 +395,11 @@ int init(void) {
     s_modelMatrices.push_back(glm::mat4(1));
     s_meshAttribs.push_back({ s_models[1].materialIndex });
 
-    for (int i = -24; i <= 6; ++i) {
-        for (int j = -24; j <= 6; ++j) {
-            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
-            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, 0, j * 2)));
-            s_meshAttribs.push_back({ s_models[0].materialIndex });
-        }
-    }
-    for (int i = -5; i <= 5; ++i) {
-        for (int j = 1; j <= 3; ++j) {
-            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
-            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, 4)));
-            s_meshAttribs.push_back({ s_models[0].materialIndex });
-        }
-    }
-    for (int i = -5; i <= 5; ++i) {
-        for (int j = 1; j <= 3; ++j) {
-            s_indirectCommands.push_back({ s_models[0].size, 1, s_models[0].begin, 0 });
-            s_modelMatrices.push_back(glm::translate(glm::mat4(1), glm::vec3(i * 2, j * 2, -4)));
-            s_meshAttribs.push_back({ s_models[0].materialIndex });
-        }
-    }
+    addObject(0, { 8, 10, 0 }, { 0, 0, 0.2 });
+    addObject(0, { -8, 10, 0 }, { 0, 0, -0.2 });
+    //for (int i = 0; i < 100; ++i) {
+        //addObject(0, { rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10 }, { 0, 0, 0 });
+    //}
 
     glNamedBufferData(s_indirectCommandBufferID, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
     glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_STATIC_DRAW);
@@ -615,6 +613,21 @@ void update(double t, double dt) {
             p.vel *= 0.9998;
         }
     }
+
+    // Testing purposes
+    for (auto &obj: s_objects) {
+        obj.pos += obj.vel * (float) dt;
+        glm::vec3 f(0);
+        for (auto &other: s_objects) {
+            if (other.dataIndex == obj.dataIndex) continue;
+            float m = 9.81f / glm::pow(glm::length(other.pos - obj.pos), 2);
+            f += glm::normalize(other.pos - obj.pos) * m;
+        }
+        obj.vel += f * (float) dt;
+        s_modelMatrices[obj.dataIndex] = glm::translate(glm::mat4(1), obj.pos);
+    }
+
+    glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_DYNAMIC_DRAW);
 }
 
 ////
@@ -640,7 +653,6 @@ void renderScene(void) {
     glUseProgram(s_sceneShaderID);
 
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
-
 
     glUseProgram(s_sceneBillboardShaderID);
     glEnable(GL_BLEND);
