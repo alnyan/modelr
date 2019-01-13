@@ -4,7 +4,7 @@
 
 #define R_SHADOW_MAP_WIDTH      4096
 #define R_SHADOW_MAP_HEIGHT     4096
-#define R_PARTICLE_MAX          1000
+#define R_PARTICLE_MAX          10000
 
 
 #define S_ATTRIB_VERTEX         0

@@ -624,7 +624,6 @@ void drawBillboard(GLuint s, double t, Model *m, const Particle &p) {
     auto l = glGetUniformLocation(s, "mModelMatrix");
     glUniformMatrix4fv(l, 1, GL_FALSE, &model[0][0]);
     float lt = t - p.t0;
-    std::cout << lt << std::endl;
     l = glGetUniformLocation(s, "mLifetime");
     glUniform1f(l, lt);
     l = glGetUniformLocation(s, "mLifespan");
