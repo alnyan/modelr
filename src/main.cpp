@@ -9,6 +9,7 @@
 #include "gameobject.h"
 #include "fpscamera.h"
 #include "res/lodepng.h"
+#include <algorithm>
 #include <map>
 
 #include "render/meshobject.h"
@@ -22,6 +23,7 @@ static GLFWwindow *s_window;
 
 static constexpr float s_moveSpeed = 5;
 static int m_width, m_height;
+static Particle s_particles[R_PARTICLE_MAX];
 
 // Dynamic objects
 static GLuint s_sceneShaderID;
@@ -83,6 +85,9 @@ static SceneLight0UniformData s_light0UniformData {
     {},
     glm::vec4(glm::normalize(glm::vec3(1, 1, 1)), 1)
 };
+
+// Particles
+static float s_lastParticleTime;
 
 static int s_viewType = 0;
 static int s_renderType = 0;
@@ -327,20 +332,21 @@ int loadTextures(void) {
     glMakeTextureHandleResidentARB(undefinedTextureHandle);
     s_textureHandles[textureIndex(S_TEXTURE_UNDEFINED)] = undefinedTextureHandle;
 
-    glGenTextures(3, s_textureIDs);
+    glGenTextures(4, s_textureIDs);
     std::list<std::string> textures {
         "assets/texture.png",
         "assets/normal.png",
-        "assets/terrain.png"
+        "assets/terrain.png",
+        "assets/smoke.png"
     };
-    int *indices = new int[3];
+    int *indices = new int[4];
 
     if (loadTextureMulti(indices, textures) != 0) {
         delete indices;
         return -1;
     }
 
-    for (int j = 0; j < 3; ++j) {
+    for (int j = 0; j < 4; ++j) {
         int i = indices[j];
         GLuint texID = s_textureIDs[i];
         GLuint texHandle = glGetTextureHandleARB(texID);
@@ -568,17 +574,61 @@ void updateLight0(double t) {
 
 }
 
+static int s_lastParticle = 0;
+
+bool Particle::operator <(const Particle &other) const {
+    float d0 = glm::length(other.pos - glm::vec3(s_sceneUniformData.m_cameraPosition));
+    float d1 = glm::length(pos - glm::vec3(s_sceneUniformData.m_cameraPosition));
+
+    return d0 < d1;
+}
+
+void addParticle(glm::vec3 pos, glm::vec3 vel, float t0, float t) {
+    int i = s_lastParticle++;
+    s_lastParticle %= R_PARTICLE_MAX;
+
+    s_particles[i] = {
+        pos, vel, t0, t
+    };
+}
+
 void update(double t, double dt) {
     updatePlayer(t, dt);
     updateLight0(t);
+
+    if (t - s_lastParticleTime > 0.05) {
+        s_lastParticleTime = t;
+        auto r0 = rand() / (float) RAND_MAX;
+        auto r1 = rand() / (float) RAND_MAX;
+        float y = 0.06;
+        float sx = 0.005;
+
+        addParticle({ 6, 1, 6 }, { r0 * sx * 2 - sx, y, r1 * sx * 2 - sx }, t, 6);
+    }
+
+    for (int i = 0; i < R_PARTICLE_MAX; ++i) {
+        Particle &p = s_particles[i];
+
+        if ((t - p.t0) - p.t > 0 || p.t < 1 || p.t0 == 0) {
+        } else {
+            p.pos += p.vel;
+            p.vel *= 0.9998;
+        }
+    }
 }
 
 ////
 
-void drawBillboard(Model *m, float x, float y, float z) {
-    glm::mat4 model = glm::translate(glm::mat4(1), {x, y, z});
-    auto l = glGetUniformLocation(s_sceneBillboardShaderID, "mModelMatrix");
+void drawBillboard(GLuint s, double t, Model *m, const Particle &p) {
+    glm::mat4 model = glm::translate(glm::mat4(1), p.pos);
+    auto l = glGetUniformLocation(s, "mModelMatrix");
     glUniformMatrix4fv(l, 1, GL_FALSE, &model[0][0]);
+    float lt = t - p.t0;
+    std::cout << lt << std::endl;
+    l = glGetUniformLocation(s, "mLifetime");
+    glUniform1f(l, lt);
+    l = glGetUniformLocation(s, "mLifespan");
+    glUniform1f(l, p.t);
 
     glDrawArrays(GL_TRIANGLES, m->begin, m->size);
 }
@@ -587,15 +637,25 @@ void renderScene(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
     glViewport(0, 0, m_width, m_height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     glUseProgram(s_sceneShaderID);
 
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 
-    glUseProgram(s_sceneBillboardShaderID);
 
-    for (int i = 0; i < 100; ++i) {
-        drawBillboard(&s_models[0], glm::cos(glfwGetTime()) * i, 10 + glm::sin(glfwGetTime() + (i * M_PI) / 4), glm::sin(glfwGetTime()) * i);
+    glUseProgram(s_sceneBillboardShaderID);
+    glEnable(GL_BLEND);
+    //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    auto t = glfwGetTime();
+    for (int i = 0; i < R_PARTICLE_MAX; ++i) {
+        if (t - s_particles[i].t0 < s_particles[i].t) {
+            drawBillboard(s_sceneBillboardShaderID, t, &s_models[0], s_particles[i]);
+        }
     }
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -611,13 +671,6 @@ void renderLight0(int i) {
 
     //glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
-
-    glUseProgram(s_billboardDepthShaderID);
-    l = glGetUniformLocation(s_billboardDepthShaderID, "mRenderCascade");
-    glUniform1i(l, i);
-    for (int i = 0; i < 100; ++i) {
-        drawBillboard(&s_models[0], glm::cos(glfwGetTime()) * i, 10 + glm::sin(glfwGetTime() + (i * M_PI) / 4), glm::sin(glfwGetTime()) * i);
-    }
 }
 
 void renderScreen(void) {

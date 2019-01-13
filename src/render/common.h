@@ -4,6 +4,7 @@
 
 #define R_SHADOW_MAP_WIDTH      4096
 #define R_SHADOW_MAP_HEIGHT     4096
+#define R_PARTICLE_MAX          1000
 
 
 #define S_ATTRIB_VERTEX         0
@@ -54,6 +55,14 @@ struct MaterialUniformData {
 struct MeshAttrib {
     int material;
     int pad[3];
+};
+
+struct Particle {
+    glm::vec3 pos;
+    glm::vec3 vel;
+    float t0, t;
+
+    bool operator <(const Particle &other) const;
 };
 
 ////
