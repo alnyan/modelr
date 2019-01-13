@@ -77,7 +77,7 @@ LightParams mLights[1] = {
     // Sunlight
     {
         vec4(-mLight0Pos.xyz, 0),
-        vec3(0.5, 1, 1),
+        vec3(1, 1, 0.6),
         1
     }
 };

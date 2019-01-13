@@ -85,6 +85,7 @@ static SceneLight0UniformData s_light0UniformData {
 };
 
 static int s_viewType = 0;
+static int s_renderType = 0;
 static int s_shadowControl = 0;
 
 //
@@ -268,6 +269,7 @@ int loadData(void) {
         mat = &s_materials[idx];
         mat->m_maps[1] = getTexture("assets/normal.png");
         mat->m_maps[0] = getTexture("assets/texture.png");          // TODO: use actual linking
+        mat->m_Ks.w = 1e10;
 
         if ((idx = createMaterial("Material1")) < 0) {
             std::cerr << "Failed to setup materials" << std::endl;
@@ -278,6 +280,7 @@ int loadData(void) {
         // LOL
         mat->m_maps[1] = getTexture("assets/terrain.png");
         mat->m_maps[0] = getTexture("assets/terrain.png");
+        mat->m_Ks.w = 1e10;
 
         s_models[0].materialIndex = idx - 1;
         s_models[1].materialIndex = idx;             // No material, testing purposes
@@ -586,7 +589,7 @@ void renderScene(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(s_sceneShaderID);
 
-    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 
     glUseProgram(s_sceneBillboardShaderID);
 
@@ -606,7 +609,8 @@ void renderLight0(int i) {
     auto l = glGetUniformLocation(s_depthShaderID, "mRenderCascade");
     glUniform1i(l, i);
 
-    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
+    //glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
 
     glUseProgram(s_billboardDepthShaderID);
     l = glGetUniformLocation(s_billboardDepthShaderID, "mRenderCascade");
@@ -731,6 +735,10 @@ void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
     }
     if (key == GLFW_KEY_MINUS && action == 1) {
         --s_shadowControl;
+    }
+    if (key == GLFW_KEY_R && action == 1) {
+        ++s_renderType;
+        s_renderType %= 2;
     }
 
     if (key == GLFW_KEY_W) {
