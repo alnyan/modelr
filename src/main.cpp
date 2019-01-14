@@ -27,14 +27,14 @@ static Particle s_particles[R_PARTICLE_MAX];
 // Dynamic objects
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
-static GLuint s_modelMatrixBufferID,
-              s_meshAttribBufferID,
-              s_indirectCommandBufferID;
+//static GLuint s_modelMatrixBufferID,
+              //s_meshAttribBufferID,
+              //s_indirectCommandBufferID;
 static GLuint s_sceneBillboardShaderID;
 
-static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
-static std::vector<glm::mat4> s_modelMatrices;
-static std::vector<MeshAttrib> s_meshAttribs;
+//static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
+//static std::vector<glm::mat4> s_modelMatrices;
+//static std::vector<MeshAttrib> s_meshAttribs;
 static std::vector<GameObject> s_objects;
 
 static MeshBuilder *s_allGeometryBuilder;
@@ -61,6 +61,7 @@ static double s_transferTime, s_drawCallTime;
 static double s_meanFrameTime = 0;
 static double s_frameTimeSum = 0;
 static double s_lastTime = 0;
+static bool s_phys = true;
 
 // Post-processing
 static GLuint s_sceneBuffer;
@@ -275,7 +276,7 @@ int loadData(void) {
         mat = &s_materials[idx];
         mat->m_maps[1] = getTexture("assets/normal.png");
         mat->m_maps[0] = getTexture("assets/texture.png");          // TODO: use actual linking
-        mat->m_Ks.w = 1e10;
+        mat->m_Ks.w = 1;
 
         if ((idx = createMaterial("Material1")) < 0) {
             std::cerr << "Failed to setup materials" << std::endl;
@@ -373,11 +374,126 @@ int loadTextures(void) {
     return 0;
 }
 
+
+void *allocGlBuffer(GLuint &buffer, size_t sz, GLenum purpose, const void *data = NULL) {
+    glGenBuffers(1, &buffer);
+    glBindBuffer(purpose, buffer);
+    glBufferStorage(purpose, sz, data, GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+    return glMapBufferRange(purpose, 0, sz, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+}
+
+void *reallocGlBuffer(GLuint &buffer, size_t sz, GLenum purpose, const void *data) {
+    glBindBuffer(purpose, buffer);
+    glUnmapBuffer(purpose);
+    glDeleteBuffers(1, &buffer);
+
+    return allocGlBuffer(buffer, sz, purpose, data);
+}
+
+void *allocGlShaderSharedBuffer(GLuint &buffer, size_t sz, GLuint slot, const void *data = NULL) {
+    glGenBuffers(1, &buffer);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, slot, buffer);
+    glNamedBufferStorage(buffer, sz, data, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+    return glMapNamedBufferRange(buffer, 0, sz, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+}
+
+void *reallocGlShaderSharedBuffer(GLuint &buffer, size_t sz, GLuint slot, const void *data) {
+    glUnmapNamedBuffer(buffer);
+    glDeleteBuffers(1, &buffer);
+
+    return allocGlShaderSharedBuffer(buffer, sz, slot, data);
+}
+
+template<typename T, GLenum P, GLuint B = 0xFF> struct GlDynamicArray {
+    T *data = nullptr;
+    GLuint bufferID = 0;
+    GLuint capacity = 32;
+    GLuint size = 0;
+
+    void generate() {
+        if constexpr (P == GL_SHADER_STORAGE_BUFFER) {
+            data = (T *) allocGlShaderSharedBuffer(bufferID, sizeof(T) * capacity, B);
+        } else {
+            data = (T *) allocGlBuffer(bufferID, sizeof(T) * capacity, P);
+        }
+
+        if (!data) {
+            throw std::runtime_error("Failed to reallocate buffers");
+        }
+    }
+
+    void expand(GLuint newCapacity) {
+        std::cout << "realloc: " << capacity << " -> " << newCapacity << std::endl;
+        // Realloc buffer
+        capacity = newCapacity;
+        if constexpr (P == GL_SHADER_STORAGE_BUFFER) {
+            data = (T *) reallocGlShaderSharedBuffer(bufferID, sizeof(T) * capacity, B, data);
+        } else {
+            data = (T *) reallocGlBuffer(bufferID, sizeof(T) * capacity, P, data);
+        }
+        if (!data) {
+            throw std::runtime_error("Failed to reallocate buffers");
+        }
+    }
+
+    void remove(size_t idx) {
+        std::cout << "Remove " << idx << ", size " << size << std::endl;
+        assert(idx < size);
+        assert(data);
+
+        for (size_t i = size - 1; i > idx; --i) {
+            data[i - 1] = data[i];
+        }
+        --size;
+
+        if (capacity / 2 > size + capacity / 4) {
+            expand(capacity / 2);
+        }
+    }
+
+    void append(const T &obj) {
+        assert(data);
+
+        if (size + 1 >= capacity) {
+            expand(capacity * 2);
+        }
+
+        data[size] = obj;
+        ++size;
+    }
+
+    const T &operator [](size_t i) const {
+        return data[i];
+    }
+
+    T &operator [](size_t i) {
+        return data[i];
+    }
+};
+
+static GlDynamicArray<DrawArraysIndirectCommand, GL_DRAW_INDIRECT_BUFFER, 0xFF> s_indirectCommands;
+static GlDynamicArray<MeshAttrib, GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB> s_meshAttribs;
+static GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> s_modelMatrices;
+
+void rmObject(int index) {
+    const auto &obj = s_objects[index];
+
+    s_indirectCommands.remove(obj.dataIndex);
+    s_meshAttribs.remove(obj.dataIndex);
+    s_modelMatrices.remove(obj.dataIndex);
+
+    s_objects.erase(s_objects.begin() + index);
+    for (int i = index; i < s_objects.size(); ++i) {
+        --s_objects[i].dataIndex;
+    }
+}
+
 void addObject(int modelID, glm::vec3 pos, glm::vec3 vel) {
-    int index = s_indirectCommands.size();
-    s_indirectCommands.push_back({ s_models[modelID].size, 1, s_models[modelID].begin, 0 });
-    s_meshAttribs.push_back({ s_models[modelID].materialIndex });
-    s_modelMatrices.push_back(glm::mat4(1));
+    int index = s_indirectCommands.size;
+
+    s_indirectCommands.append({ s_models[modelID].size, 1, s_models[modelID].begin, 0 });
+    s_meshAttribs.append({ s_models[modelID].materialIndex });
+    s_modelMatrices.append(glm::mat4(1));
 
     s_objects.push_back({
         pos,
@@ -390,20 +506,16 @@ int init(void) {
     s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
     s_sceneUniformData.m_cameraDestination = glm::vec4(2, 2, 3, 1);
 
+    s_indirectCommands.generate();
+    s_meshAttribs.generate();
+    s_modelMatrices.generate();
+
     // Setup drawcalls
-    s_indirectCommands.push_back({ s_models[1].size, 1, s_models[1].begin, 0 });
-    s_modelMatrices.push_back(glm::mat4(1));
-    s_meshAttribs.push_back({ s_models[1].materialIndex });
+    addObject(1, { 0, 0, 0 }, { 0, 0, 0 });
 
-    addObject(0, { 8, 10, 0 }, { 0, 0, 0.2 });
-    addObject(0, { -8, 10, 0 }, { 0, 0, -0.2 });
-    //for (int i = 0; i < 100; ++i) {
-        //addObject(0, { rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10 }, { 0, 0, 0 });
-    //}
-
-    glNamedBufferData(s_indirectCommandBufferID, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
-    glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_STATIC_DRAW);
-    glNamedBufferData(s_meshAttribBufferID, s_meshAttribs.size() * sizeof(MeshAttrib), &s_meshAttribs[0], GL_STATIC_DRAW);
+    for (int i = 0; i < 100; ++i) {
+        addObject(0, { rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10 }, { 0, 0, 0 });
+    }
 
     return 0;
 }
@@ -475,17 +587,6 @@ int setup_gl(void) {
 
     // Main data setup
     glClearColor(0, 0.25, 0.25, 1);
-
-    glGenBuffers(1, &s_modelMatrixBufferID);
-    glGenBuffers(1, &s_indirectCommandBufferID);
-    glGenBuffers(1, &s_meshAttribBufferID);
-
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.size() * sizeof(DrawArraysIndirectCommand), &s_indirectCommands[0], GL_STATIC_DRAW);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL, s_modelMatrixBufferID);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB, s_meshAttribBufferID);
 
     // Scene buffer
     glGenBuffers(1, &s_sceneUniformBufferID);
@@ -573,6 +674,7 @@ void updateLight0(double t) {
 }
 
 static int s_lastParticle = 0;
+static double s_lastObjectTime = 0;
 
 bool Particle::operator <(const Particle &other) const {
     float d0 = glm::length(other.pos - glm::vec3(s_sceneUniformData.m_cameraPosition));
@@ -594,6 +696,24 @@ void update(double t, double dt) {
     updatePlayer(t, dt);
     updateLight0(t);
 
+    if (s_phys) {
+    if (t - s_lastObjectTime > 3) {
+        s_lastObjectTime = t;
+        for (int i = 0; i < 5; ++i)
+        if (s_indirectCommands.size > 1)
+            rmObject(1);
+        //for (int i = 0; i < 10; ++i) {
+            //addObject(0,
+                //{
+                    //rand() / (float) RAND_MAX * 10,
+                    //rand() / (float) RAND_MAX * 10,
+                    //rand() / (float) RAND_MAX * 10
+                //},
+                //{ 0, 0, 0 });
+        //}
+        std::cout << s_indirectCommands.size << " objects" << std::endl;
+    }
+
     if (t - s_lastParticleTime > 0.05) {
         s_lastParticleTime = t;
         auto r0 = rand() / (float) RAND_MAX;
@@ -614,20 +734,16 @@ void update(double t, double dt) {
         }
     }
 
-    // Testing purposes
+
     for (auto &obj: s_objects) {
+        if (obj.dataIndex == 0) continue;
         obj.pos += obj.vel * (float) dt;
-        glm::vec3 f(0);
-        for (auto &other: s_objects) {
-            if (other.dataIndex == obj.dataIndex) continue;
-            float m = 9.81f / glm::pow(glm::length(other.pos - obj.pos), 2);
-            f += glm::normalize(other.pos - obj.pos) * m;
-        }
+        glm::vec3 f = glm::normalize(obj.pos) / (float) glm::pow(glm::length(obj.pos), 2);
         obj.vel += f * (float) dt;
         s_modelMatrices[obj.dataIndex] = glm::translate(glm::mat4(1), obj.pos);
     }
 
-    glNamedBufferData(s_modelMatrixBufferID, s_modelMatrices.size() * sizeof(glm::mat4), &s_modelMatrices[0], GL_DYNAMIC_DRAW);
+    }
 }
 
 ////
@@ -652,7 +768,7 @@ void renderScene(void) {
 
     glUseProgram(s_sceneShaderID);
 
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
 
     glUseProgram(s_sceneBillboardShaderID);
     glEnable(GL_BLEND);
@@ -681,7 +797,7 @@ void renderLight0(int i) {
     glUniform1i(l, i);
 
     //glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
 }
 
 void renderScreen(void) {
@@ -721,7 +837,7 @@ void render(void) {
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glBindVertexArray(s_allGeometryArrayID);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommandBufferID);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.bufferID);
     glEnableVertexAttribArray(S_ATTRIB_VERTEX);
     glEnableVertexAttribArray(S_ATTRIB_TEXCOORD);
     glEnableVertexAttribArray(S_ATTRIB_NORMAL);
@@ -822,6 +938,10 @@ void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
     }
     if (key == GLFW_KEY_LEFT_SHIFT) {
         s_fly = -!!action;
+    }
+
+    if (key == GLFW_KEY_P && action == 1) {
+        s_phys = !s_phys;
     }
 }
 
