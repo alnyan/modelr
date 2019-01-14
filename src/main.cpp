@@ -27,14 +27,11 @@ static Particle s_particles[R_PARTICLE_MAX];
 // Dynamic objects
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
-//static GLuint s_modelMatrixBufferID,
-              //s_meshAttribBufferID,
-              //s_indirectCommandBufferID;
+static GlDynamicArray<DrawArraysIndirectCommand, GL_DRAW_INDIRECT_BUFFER, 0xFF> s_indirectCommands;
+static GlDynamicArray<MeshAttrib, GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB> s_meshAttribs;
+static GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> s_modelMatrices;
 static GLuint s_sceneBillboardShaderID;
 
-//static std::vector<DrawArraysIndirectCommand> s_indirectCommands;
-//static std::vector<glm::mat4> s_modelMatrices;
-//static std::vector<MeshAttrib> s_meshAttribs;
 static std::vector<GameObject> s_objects;
 
 static MeshBuilder *s_allGeometryBuilder;
@@ -470,10 +467,6 @@ template<typename T, GLenum P, GLuint B = 0xFF> struct GlDynamicArray {
         return data[i];
     }
 };
-
-static GlDynamicArray<DrawArraysIndirectCommand, GL_DRAW_INDIRECT_BUFFER, 0xFF> s_indirectCommands;
-static GlDynamicArray<MeshAttrib, GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB> s_meshAttribs;
-static GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> s_modelMatrices;
 
 void rmObject(int index) {
     const auto &obj = s_objects[index];
