@@ -28,7 +28,8 @@
 #define S_TEXTURE_COUNT         256
 #define S_MATERIAL_COUNT        256
 #define S_SHADOW_CASCADES       4
-#define S_TEXTURE_MAX           (S_TEXTURE_COUNT - S_SHADOW_CASCADES - 1)
+#define S_TEXTURE_MAX           (S_TEXTURE_COUNT - S_SHADOW_CASCADES - 2)
+#define S_VELOCITY_BUFFER       (S_TEXTURE_COUNT - S_SHADOW_CASCADES - 1)
 #define S_SHADOW_MAP_0          (S_TEXTURE_COUNT - S_SHADOW_CASCADES)
 #define S_TEXTURE_UNDEFINED     (S_TEXTURE_MAX)
 
@@ -59,6 +60,8 @@ struct MaterialUniformData {
 struct MeshAttrib {
     int material;
     int pad[3];
+    glm::vec4 vel;
+    //int pad[3];
 };
 
 struct Particle {

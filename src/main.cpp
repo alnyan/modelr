@@ -53,7 +53,9 @@ static MaterialUniformData s_materials[S_MATERIAL_COUNT];
 static GLuint s_sceneUniformBufferID;
 static GLuint s_sceneLight0UniformBufferID;
 static SceneUniformData s_sceneUniformData;
+static glm::vec3 s_cameraVelocity;
 static float s_cameraPitch = 0, s_cameraYaw = 0;
+static glm::vec2 s_cameraRotDelta;
 static int s_walk = 0;
 static int s_strafe = 0;
 static int s_fly = 0;
@@ -69,7 +71,7 @@ static bool s_phys = true;
 
 // Post-processing
 static GLuint s_sceneBuffer;
-static GLuint s_sceneTextures[2];
+static GLuint s_sceneTextures[3];
 static GLuint s_screenArrayID, s_screenBufferID, s_depthBufferID;
 static GLfloat s_screenQuadData[] {
     // xyzuv
@@ -325,6 +327,14 @@ int loadTextures(void) {
         }
     }
 
+    //std::cout << "Velocity map " << 0 << ": " << s_sceneTextures[2] << std::endl;
+    //s_textureHandles[textureIndex(S_VELOCITY_BUFFER)] = glGetTextureHandleARB(s_sceneTextures[2]);
+    //if (glGetError()) {
+        //std::cerr << "Failed to generate velocity map handle" << std::endl;
+        //return -1;
+    //}
+    //glMakeTextureHandleResidentARB(s_textureHandles[textureIndex(S_VELOCITY_BUFFER)]);
+
     GLuint undefinedTextureID;
     glGenTextures(1, &undefinedTextureID);
 
@@ -400,7 +410,7 @@ void addObject(int modelID, glm::vec3 pos, glm::vec3 vel) {
     int index = s_indirectCommands.size;
 
     s_indirectCommands.append({ s_models[modelID].size, 1, s_models[modelID].begin, 0 });
-    s_meshAttribs.append({ s_models[modelID].materialIndex });
+    s_meshAttribs.append({ s_models[modelID].materialIndex, {}, glm::vec4(vel, 0) });
     s_modelMatrices.append(glm::mat4(1));
 
     s_objects.push_back({
@@ -435,7 +445,7 @@ int setup_gl(void) {
 
     // Post-processing and render to texture setup
     glGenFramebuffers(1, &s_sceneBuffer);
-    glGenTextures(2, s_sceneTextures);
+    glGenTextures(3, s_sceneTextures);
     glGenRenderbuffers(1, &s_depthBufferID);
 
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
@@ -448,12 +458,17 @@ int setup_gl(void) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 800, 600, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, s_sceneTextures[2]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGB, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, s_sceneTextures[0], 0);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, s_sceneTextures[2], 0);
     glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_sceneTextures[1], 0);
-    GLenum db[] { GL_COLOR_ATTACHMENT0 };
-    glDrawBuffers(1, db);
+    GLenum db[] { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glDrawBuffers(2, db);
 
     glGenVertexArrays(1, &s_screenArrayID);
     glGenBuffers(1, &s_screenBufferID);
@@ -555,10 +570,14 @@ void updatePlayer(double t, double dt) {
             0
         ));
         auto walkDelta = walkDir * (float) dt * 10.0f;
+        s_cameraVelocity = 0.01f * glm::vec3(walkDelta) + glm::vec3(s_cameraRotDelta, 0);
 
         s_sceneUniformData.m_cameraPosition += walkDelta;
         s_sceneUniformData.m_cameraDestination += walkDelta;
+    } else {
+        s_cameraVelocity = glm::vec3(s_cameraRotDelta, 0);
     }
+    s_cameraRotDelta = glm::mix(glm::vec2(0), s_cameraRotDelta, 0.3);
 
     s_sceneUniformData.m_cameraMatrix = glm::lookAt(
         glm::vec3(s_sceneUniformData.m_cameraPosition),
@@ -650,11 +669,15 @@ void update(double t, double dt) {
     }
 
     for (auto &obj: s_objects) {
-        if (obj.dataIndex == 0) continue;
+        if (obj.dataIndex == 0) {
+            s_meshAttribs[obj.dataIndex].vel = glm::vec4(0);
+            continue;
+        }
         obj.pos += obj.vel * (float) dt;
         glm::vec3 f = glm::normalize(obj.pos) / (float) glm::pow(glm::length(obj.pos), 2);
         obj.vel += f * (float) dt;
         s_modelMatrices[obj.dataIndex] = glm::translate(glm::mat4(1), obj.pos);
+        s_meshAttribs[obj.dataIndex].vel = glm::vec4(obj.vel, 1);
     }
 
     }
@@ -664,6 +687,8 @@ void update(double t, double dt) {
 
 void renderScene(void) {
     glUseProgram(s_sceneShaderID);
+    auto l = glGetUniformLocation(s_sceneShaderID, "mCameraVelocity");
+    glUniform3f(l, s_cameraVelocity.x, s_cameraVelocity.y, s_cameraVelocity.z);
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
 }
 
@@ -685,13 +710,17 @@ void renderScreen(void) {
     glUseProgram(s_screenShaderID);
     auto l = glGetUniformLocation(s_screenShaderID, "mDepthTexture");
     glUniform1i(l, 1);
+    l = glGetUniformLocation(s_screenShaderID, "mVelocityTexture");
+    glUniform1i(l, 2);
     l = glGetUniformLocation(s_screenShaderID, "mScreenDimensions");
     glm::vec4 screenDimensions(m_width, m_height, 0.1f, 100.0f);
     glUniform4f(l, screenDimensions.x, screenDimensions.y, screenDimensions.z, screenDimensions.w);
 
-    glBindTextures(0, 2, s_sceneTextures);
-    if (s_viewType)
+    glBindTextures(0, 3, s_sceneTextures);
+    if (s_viewType && s_viewType < 5)
         glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[s_viewType - 1]);
+    else if (s_viewType == 5)
+        glBindTexture(GL_TEXTURE_2D, s_sceneTextures[2]);
 
     glBindVertexArray(s_screenArrayID);
     glEnableVertexAttribArray(S_ATTRIB_VERTEX);
@@ -782,9 +811,11 @@ void windowSizeCallback(GLFWwindow *win, int width, int height) {
     m_height = height;
 
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, m_width, m_height, 0, GL_RGB, GL_FLOAT, 0);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    glBindTexture(GL_TEXTURE_2D, s_sceneTextures[2]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, m_width, m_height, 0, GL_RGB, GL_FLOAT, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
@@ -802,12 +833,13 @@ void cursorPosCallback(GLFWwindow *win, double x, double y) {
     s_cameraYaw += cx;
 
     s_sceneUniformData.m_cameraDestination = s_sceneUniformData.m_cameraPosition + glm::vec4(cos(s_cameraYaw), 0, glm::sin(s_cameraYaw), 0);
+    s_cameraRotDelta = glm::mix(s_cameraRotDelta, glm::vec2(s_cameraYaw, 0) + s_cameraRotDelta, 0.2);
 }
 
 void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
     if (key == GLFW_KEY_T && action == 1) {
         ++s_viewType;
-        s_viewType %= 5;
+        s_viewType %= 6;
     }
     if (key == GLFW_KEY_EQUAL && action == 1) {
         ++s_shadowControl;

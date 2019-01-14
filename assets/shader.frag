@@ -11,6 +11,9 @@ struct Material {
 struct MeshAttrib {
     int mMaterialIndex;
     int pad[3];
+    vec4 mVelocity;
+    //int mMaterialIndex;
+    //float mVelX, mVelY, mVelZ;
 };
 
 struct LightParams {
@@ -27,6 +30,10 @@ const float cascades[S_SHADOW_CASCADES] = {
     75,
     95
 };
+
+////
+
+uniform vec3 mCameraVelocity;
 
 ////
 
@@ -72,6 +79,7 @@ layout(std430, binding=S_SSBO_MESH_ATTRIB) buffer mMeshAttribBuffer {
 //
 
 layout(location = 0) out vec3 color;
+layout(location = 1) out vec3 velColor;
 
 LightParams mLights[1] = {
     // Sunlight
@@ -189,6 +197,7 @@ void main() {
 
     // Post-shadow
     int matIndex = mMeshAttribs[mDrawID].mMaterialIndex;
+    vec3 vel = mMeshAttribs[mDrawID].mVelocity.xyz - mCameraVelocity;
     int m_map_Kd = S_TEXTURE_UNDEFINED;
     int m_map_Bump = -1;
     float m_Ns = 100;
@@ -221,6 +230,10 @@ void main() {
         mapNormal = mSourceNormal;
         matTBN = mat3(1);
     }
+
+    vec4 projVel = mProjectionMatrix * mCameraMatrix * vec4(vel, 0);
+
+    velColor = vec3(projVel.xy, 0);
 
     color = baseKd * ambientIntensity;
     vec3 eyeDir = normalize(matTBN * (-(mCameraDestination - mCameraPosition)).xyz);
