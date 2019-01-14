@@ -17,6 +17,7 @@ set(SOURCES src/main.cpp
             src/render/shader.cpp
             src/res/lodepng.cpp
             src/gameobject.cpp
+            src/utils.cpp
             src/res/assets.cpp)
 configure_file(src/config.h.in ${CMAKE_BINARY_DIR}/config.h)
 

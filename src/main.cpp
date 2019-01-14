@@ -13,6 +13,7 @@
 #include <map>
 
 #include "render/wavefront.h"
+#include "gldynamicarray.h"
 
 #include "config.h"
 
@@ -372,101 +373,6 @@ int loadTextures(void) {
 }
 
 
-void *allocGlBuffer(GLuint &buffer, size_t sz, GLenum purpose, const void *data = NULL) {
-    glGenBuffers(1, &buffer);
-    glBindBuffer(purpose, buffer);
-    glBufferStorage(purpose, sz, data, GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
-    return glMapBufferRange(purpose, 0, sz, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
-}
-
-void *reallocGlBuffer(GLuint &buffer, size_t sz, GLenum purpose, const void *data) {
-    glBindBuffer(purpose, buffer);
-    glUnmapBuffer(purpose);
-    glDeleteBuffers(1, &buffer);
-
-    return allocGlBuffer(buffer, sz, purpose, data);
-}
-
-void *allocGlShaderSharedBuffer(GLuint &buffer, size_t sz, GLuint slot, const void *data = NULL) {
-    glGenBuffers(1, &buffer);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, slot, buffer);
-    glNamedBufferStorage(buffer, sz, data, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
-    return glMapNamedBufferRange(buffer, 0, sz, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
-}
-
-void *reallocGlShaderSharedBuffer(GLuint &buffer, size_t sz, GLuint slot, const void *data) {
-    glUnmapNamedBuffer(buffer);
-    glDeleteBuffers(1, &buffer);
-
-    return allocGlShaderSharedBuffer(buffer, sz, slot, data);
-}
-
-template<typename T, GLenum P, GLuint B = 0xFF> struct GlDynamicArray {
-    T *data = nullptr;
-    GLuint bufferID = 0;
-    GLuint capacity = 32;
-    GLuint size = 0;
-
-    void generate() {
-        if constexpr (P == GL_SHADER_STORAGE_BUFFER) {
-            data = (T *) allocGlShaderSharedBuffer(bufferID, sizeof(T) * capacity, B);
-        } else {
-            data = (T *) allocGlBuffer(bufferID, sizeof(T) * capacity, P);
-        }
-
-        if (!data) {
-            throw std::runtime_error("Failed to reallocate buffers");
-        }
-    }
-
-    void expand(GLuint newCapacity) {
-        std::cout << "realloc: " << capacity << " -> " << newCapacity << std::endl;
-        // Realloc buffer
-        capacity = newCapacity;
-        if constexpr (P == GL_SHADER_STORAGE_BUFFER) {
-            data = (T *) reallocGlShaderSharedBuffer(bufferID, sizeof(T) * capacity, B, data);
-        } else {
-            data = (T *) reallocGlBuffer(bufferID, sizeof(T) * capacity, P, data);
-        }
-        if (!data) {
-            throw std::runtime_error("Failed to reallocate buffers");
-        }
-    }
-
-    void remove(size_t idx) {
-        std::cout << "Remove " << idx << ", size " << size << std::endl;
-        assert(idx < size);
-        assert(data);
-
-        for (size_t i = size - 1; i > idx; --i) {
-            data[i - 1] = data[i];
-        }
-        --size;
-
-        if (capacity / 2 > size + capacity / 4) {
-            expand(capacity / 2);
-        }
-    }
-
-    void append(const T &obj) {
-        assert(data);
-
-        if (size + 1 >= capacity) {
-            expand(capacity * 2);
-        }
-
-        data[size] = obj;
-        ++size;
-    }
-
-    const T &operator [](size_t i) const {
-        return data[i];
-    }
-
-    T &operator [](size_t i) {
-        return data[i];
-    }
-};
 
 void rmObject(int index) {
     const auto &obj = s_objects[index];
