@@ -13,6 +13,9 @@
 #define S_ATTRIB_TANGENT        3
 #define S_ATTRIB_BITANGENT      4
 
+#define S_PARTICLE_ATTRIB_VERTEX    0
+#define S_PARTICLE_ATTRIB_TEXCOORD  1
+
 #define S_UBO_SCENE             0
 #define S_UBO_TEXTURES          1
 #define S_UBO_LIGHT0            2
@@ -20,6 +23,7 @@
 
 #define S_SSBO_MODEL            1
 #define S_SSBO_MESH_ATTRIB      2
+#define S_SSBO_PARTICLE         3
 
 #define S_TEXTURE_COUNT         256
 #define S_MATERIAL_COUNT        256
@@ -58,9 +62,10 @@ struct MeshAttrib {
 };
 
 struct Particle {
-    glm::vec3 pos;
-    glm::vec3 vel;
-    float t0, t;
+    glm::vec4 pos;
+    glm::vec4 vel;
+    glm::ivec4 opts;
+    float t, t0, u, v;
 
     bool operator <(const Particle &other) const;
 };

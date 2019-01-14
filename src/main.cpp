@@ -23,7 +23,11 @@ static GLFWwindow *s_window;
 
 static constexpr float s_moveSpeed = 5;
 static int m_width, m_height;
-static Particle s_particles[R_PARTICLE_MAX];
+
+// Particles
+static GLuint s_particleDataBufferID;
+static Particle *s_particles = nullptr;
+static GLuint s_particleGeometryArrayID;
 
 // Dynamic objects
 static GLuint s_sceneShaderID;
@@ -59,6 +63,8 @@ static double s_transferTime, s_drawCallTime;
 static double s_meanFrameTime = 0;
 static double s_frameTimeSum = 0;
 static double s_lastTime = 0;
+static int s_lastParticle = 0;
+static double s_lastObjectTime = 0;
 static bool s_phys = true;
 
 // Post-processing
@@ -206,12 +212,15 @@ int loadData(void) {
     Shader::addDefinition("S_ATTRIB_NORMAL", S_ATTRIB_NORMAL);
     Shader::addDefinition("S_ATTRIB_TANGENT", S_ATTRIB_TANGENT);
     Shader::addDefinition("S_ATTRIB_BITANGENT", S_ATTRIB_BITANGENT);
+    Shader::addDefinition("S_PARTICLE_ATTRIB_VERTEX", S_PARTICLE_ATTRIB_VERTEX);
+    Shader::addDefinition("S_PARTICLE_ATTRIB_TEXCOORD", S_PARTICLE_ATTRIB_TEXCOORD);
     Shader::addDefinition("S_UBO_SCENE", S_UBO_SCENE);
     Shader::addDefinition("S_UBO_TEXTURES", S_UBO_TEXTURES);
     Shader::addDefinition("S_UBO_LIGHT0", S_UBO_LIGHT0);
     Shader::addDefinition("S_UBO_MATERIALS", S_UBO_MATERIALS);
     Shader::addDefinition("S_SSBO_MODEL", S_SSBO_MODEL);
     Shader::addDefinition("S_SSBO_MESH_ATTRIB", S_SSBO_MESH_ATTRIB);
+    Shader::addDefinition("S_SSBO_PARTICLE", S_SSBO_PARTICLE);
     Shader::addDefinition("S_TEXTURE_COUNT", S_TEXTURE_COUNT);
     Shader::addDefinition("S_SHADOW_CASCADES", S_SHADOW_CASCADES);
     Shader::addDefinition("S_SHADOW_MAP_0", S_SHADOW_MAP_0);
@@ -508,6 +517,28 @@ int setup_gl(void) {
     glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_SCENE, s_sceneUniformBufferID);
     glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_LIGHT0, s_sceneLight0UniformBufferID);
 
+    // Particle buffers
+    GLuint particleGeometryBuffer;
+    glGenVertexArrays(1, &s_particleGeometryArrayID);
+    glGenBuffers(1, &particleGeometryBuffer);
+
+    glBindVertexArray(s_particleGeometryArrayID);
+    glBindBuffer(GL_ARRAY_BUFFER, particleGeometryBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(s_screenQuadData), s_screenQuadData, GL_STATIC_DRAW);
+    glVertexAttribPointer(S_PARTICLE_ATTRIB_VERTEX, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, 0);
+    glVertexAttribPointer(S_PARTICLE_ATTRIB_TEXCOORD, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 5, (GLvoid *) (3 * sizeof(GLfloat)));
+    glBindVertexArray(0);
+
+    assert(sizeof(Particle) == sizeof(glm::mat4));
+    glGenBuffers(1, &s_particleDataBufferID);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_PARTICLE, s_particleDataBufferID);
+    glNamedBufferStorage(s_particleDataBufferID, R_PARTICLE_MAX * sizeof(Particle), NULL, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+
+    if (!(s_particles = (Particle *) glMapNamedBufferRange(s_particleDataBufferID, 0, R_PARTICLE_MAX * sizeof(Particle), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT))) {
+        std::cerr << "Failed to generate particle buffer" << std::endl;
+        return -1;
+    }
+
     s_lastTime = glfwGetTime();
 
     return 0;
@@ -572,22 +603,12 @@ void updateLight0(double t) {
 
 }
 
-static int s_lastParticle = 0;
-static double s_lastObjectTime = 0;
-
-bool Particle::operator <(const Particle &other) const {
-    float d0 = glm::length(other.pos - glm::vec3(s_sceneUniformData.m_cameraPosition));
-    float d1 = glm::length(pos - glm::vec3(s_sceneUniformData.m_cameraPosition));
-
-    return d0 < d1;
-}
-
 void addParticle(glm::vec3 pos, glm::vec3 vel, float t0, float t) {
     int i = s_lastParticle++;
     s_lastParticle %= R_PARTICLE_MAX;
 
     s_particles[i] = {
-        pos, vel, t0, t
+        glm::vec4(pos, 0), glm::vec4(vel, 0), glm::ivec4(0), t0, t
     };
 }
 
@@ -601,15 +622,6 @@ void update(double t, double dt) {
         for (int i = 0; i < 5; ++i)
         if (s_indirectCommands.size > 1)
             rmObject(1);
-        //for (int i = 0; i < 10; ++i) {
-            //addObject(0,
-                //{
-                    //rand() / (float) RAND_MAX * 10,
-                    //rand() / (float) RAND_MAX * 10,
-                    //rand() / (float) RAND_MAX * 10
-                //},
-                //{ 0, 0, 0 });
-        //}
         std::cout << s_indirectCommands.size << " objects" << std::endl;
     }
 
@@ -617,10 +629,14 @@ void update(double t, double dt) {
         s_lastParticleTime = t;
         auto r0 = rand() / (float) RAND_MAX;
         auto r1 = rand() / (float) RAND_MAX;
+        auto r2 = rand() / (float) RAND_MAX;
+        auto r3 = rand() / (float) RAND_MAX;
+
         float y = 0.06;
         float sx = 0.005;
+        float sy = 0.1;
 
-        addParticle({ 6, 1, 6 }, { r0 * sx * 2 - sx, y, r1 * sx * 2 - sx }, t, 6);
+        addParticle({ 6 + r2 * sy * 2 - sy, 1, 6 + r3 * sy * 2 - sy }, { r0 * sx * 2 - sx, y, r1 * sx * 2 - sx }, t, 6);
     }
 
     for (int i = 0; i < R_PARTICLE_MAX; ++i) {
@@ -632,7 +648,6 @@ void update(double t, double dt) {
             p.vel *= 0.9998;
         }
     }
-
 
     for (auto &obj: s_objects) {
         if (obj.dataIndex == 0) continue;
@@ -647,43 +662,9 @@ void update(double t, double dt) {
 
 ////
 
-void drawBillboard(GLuint s, double t, Model *m, const Particle &p) {
-    glm::mat4 model = glm::translate(glm::mat4(1), p.pos);
-    auto l = glGetUniformLocation(s, "mModelMatrix");
-    glUniformMatrix4fv(l, 1, GL_FALSE, &model[0][0]);
-    float lt = t - p.t0;
-    l = glGetUniformLocation(s, "mLifetime");
-    glUniform1f(l, lt);
-    l = glGetUniformLocation(s, "mLifespan");
-    glUniform1f(l, p.t);
-
-    glDrawArrays(GL_TRIANGLES, m->begin, m->size);
-}
-
 void renderScene(void) {
-    glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
-    glViewport(0, 0, m_width, m_height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     glUseProgram(s_sceneShaderID);
-
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
-
-    glUseProgram(s_sceneBillboardShaderID);
-    glEnable(GL_BLEND);
-    //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-    auto t = glfwGetTime();
-    for (int i = 0; i < R_PARTICLE_MAX; ++i) {
-        if (t - s_particles[i].t0 < s_particles[i].t) {
-            drawBillboard(s_sceneBillboardShaderID, t, &s_models[0], s_particles[i]);
-        }
-    }
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void renderLight0(int i) {
@@ -695,7 +676,6 @@ void renderLight0(int i) {
     auto l = glGetUniformLocation(s_depthShaderID, "mRenderCascade");
     glUniform1i(l, i);
 
-    //glMultiDrawArraysIndirect(GL_TRIANGLES, 0, s_indirectCommands.size(), 0);
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
 }
 
@@ -735,6 +715,8 @@ void render(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // BEGIN RENDER
+    // BLAST 1: LIGHT'S ORTHO
     glBindVertexArray(s_allGeometryArrayID);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.bufferID);
     glEnableVertexAttribArray(S_ATTRIB_VERTEX);
@@ -743,8 +725,6 @@ void render(void) {
     glEnableVertexAttribArray(S_ATTRIB_TANGENT);
     glEnableVertexAttribArray(S_ATTRIB_BITANGENT);
 
-    // BEGIN RENDER
-    // BLAST 1: LIGHT'S ORTHO
     glCullFace(GL_FRONT);
     glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
     for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
@@ -753,19 +733,39 @@ void render(void) {
     glCullFace(GL_BACK);
 
     // BLAST 2: PLAYER'S CAMERA
+    glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
+    glViewport(0, 0, m_width, m_height);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     renderScene();
 
-    // END RENDER
-
+    // BLAST 3: PARTICLES
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-    glBindVertexArray(0);
-
     glDisableVertexAttribArray(S_ATTRIB_BITANGENT);
     glDisableVertexAttribArray(S_ATTRIB_TANGENT);
     glDisableVertexAttribArray(S_ATTRIB_NORMAL);
     glDisableVertexAttribArray(S_ATTRIB_TEXCOORD);
     glDisableVertexAttribArray(S_ATTRIB_VERTEX);
 
+    glBindVertexArray(s_particleGeometryArrayID);
+    glEnableVertexAttribArray(S_PARTICLE_ATTRIB_VERTEX);
+    glEnableVertexAttribArray(S_PARTICLE_ATTRIB_TEXCOORD);
+    glUseProgram(s_sceneBillboardShaderID);
+    glEnable(GL_BLEND);
+    //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    auto l = glGetUniformLocation(s_sceneBillboardShaderID, "mTime");
+    glUniform1f(l, t);
+    glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 6, R_PARTICLE_MAX, 0);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+
+    glBindVertexArray(0);
+    glDisableVertexAttribArray(S_PARTICLE_ATTRIB_VERTEX);
+    glDisableVertexAttribArray(S_PARTICLE_ATTRIB_TEXCOORD);
+
+    // END RENDER
     glUseProgram(0);
 
     renderScreen();
