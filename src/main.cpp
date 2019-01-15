@@ -7,13 +7,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "gameobject.h"
-#include "res/lodepng.h"
 #include <algorithm>
 #include <list>
 #include <map>
 
 #include "render/wavefront.h"
 #include "gldynamicarray.h"
+#include "resources.h"
 
 #include "config.h"
 
@@ -40,14 +40,11 @@ static GLuint s_sceneBillboardShaderID;
 static std::vector<GameObject> s_objects;
 
 static MeshBuilder *s_allGeometryBuilder;
-static Model s_models[3];
 
 // Resources
 static GLuint s_textureHandleBufferID,
               s_materialBufferID;
-static GLuint s_textureIDs[S_TEXTURE_COUNT];
 static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
-static MaterialUniformData s_materials[S_MATERIAL_COUNT];
 
 // Scene-global data
 static GLuint s_sceneUniformBufferID;
@@ -102,108 +99,6 @@ static int s_renderType = 0;
 static int s_shadowControl = 0;
 
 //
-
-static int s_lastTextureIndex = 0;
-static int s_lastMaterialIndex = 0;
-static std::map<std::string, int> s_materialBinding;
-static std::map<std::string, int> s_textureBindings;
-
-int loadTextureID(GLuint id, const std::string &path, GLuint minFilter = GL_LINEAR_MIPMAP_LINEAR, GLuint magFilter = GL_LINEAR) {
-    unsigned int w, h;
-    std::vector<unsigned char> data;
-
-    if (lodepng::decode(data, w, h, path) != 0) {
-        std::cerr << "Failed to load texture: " << path << std::endl;
-        return -1;
-    }
-
-    glBindTexture(GL_TEXTURE_2D, id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[0]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
-    if (minFilter == GL_LINEAR_MIPMAP_LINEAR) {
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    return 0;
-}
-
-int loadTexture(int *i, const std::string &path) {
-    std::cout << "Load " << path;
-    auto it = s_textureBindings.find(path);
-    if (it != s_textureBindings.end()) {
-        if (i) {
-            *i = it->second;
-        }
-        std::cout << ": cached" << std::endl;
-        return 0;
-    } else {
-        int idx = s_lastTextureIndex++;
-        s_textureBindings[path] = idx;
-        if (idx >= S_TEXTURE_MAX) {
-            std::cerr << "No free texture IDs left" << std::endl;
-            return -1;
-        }
-        if (i) {
-            *i = idx;
-        }
-
-        if (loadTextureID(s_textureIDs[idx], path) != 0) {
-            std::cerr << ": failed" << std::endl;
-            return -1;
-        }
-
-        std::cout << ": index " << idx << ", ID " << s_textureIDs[idx] << std::endl;
-
-        return 0;
-    }
-}
-
-int createMaterial(const std::string &name) {
-    auto it = s_materialBinding.find(name);
-    if (it != s_materialBinding.end()) {
-        return it->second;
-    } else {
-        int idx = s_lastMaterialIndex++;
-        if (idx >= S_MATERIAL_COUNT) {
-            std::cerr << "Failed to allocate material" << std::endl;
-            return -1;
-        }
-
-        MaterialUniformData *mat = &s_materials[idx];
-        // Initial setup
-        mat->m_maps[1] = S_TEXTURE_UNDEFINED;
-        mat->m_maps[2] = S_TEXTURE_UNDEFINED;
-        mat->m_maps[0] = S_TEXTURE_UNDEFINED;
-        mat->m_Ks = glm::vec4(0.2, 0.2, 0.2, 100);
-
-        return idx;
-    }
-}
-
-int loadTextureMulti(int *indices, const std::list<std::string> &items) {
-    int n = items.size();
-    int i = 0;
-
-    for (const auto &path: items) {
-        if (loadTexture(&indices[i], path) != 0) {
-            return -1;
-        }
-        ++i;
-    }
-
-    return 0;
-}
-
-int getTexture(const std::string &name) {
-    auto it = s_textureBindings.find(name);
-    if (it != s_textureBindings.end()) {
-        return it->second;
-    } else {
-        return -1;
-    }
-}
 
 int loadData(void) {
     std::cout << "Loading data" << std::endl;
@@ -260,13 +155,12 @@ int loadData(void) {
     s_allGeometryBuilder = new MeshBuilder(s_allGeometryArrayID);
     s_allGeometryBuilder->begin();
 
-    GLuint mat;
-    if (!Wavefront::loadObj(&s_models[0], mat, s_allGeometryBuilder, "model.obj")) {
-        std::cerr << "Failed to load model" << std::endl;
+    if (loadModel(s_allGeometryBuilder, "model.obj")) {
+        std::cout << "Failed to load models" << std::endl;
         return -1;
     }
-    if (!Wavefront::loadObj(&s_models[1], mat, s_allGeometryBuilder, "terrain.obj")) {
-        std::cerr << "Failed to load model" << std::endl;
+    if (loadModel(s_allGeometryBuilder, "terrain.obj")) {
+        std::cout << "Failed to load models" << std::endl;
         return -1;
     }
 
@@ -276,36 +170,38 @@ int loadData(void) {
     // Create materials for the two models
     {
         MaterialUniformData *mat;
+        Model *model;
         int idx;
-        if ((idx = createMaterial("Material0")) < 0) {
+        if ((idx = createMaterialObject(":Material0", &mat)) < 0) {
             std::cerr << "Failed to setup materials" << std::endl;
             return -1;
         }
 
-        mat = &s_materials[idx];
-        mat->m_maps[1] = getTexture("assets/normal.png");
-        mat->m_maps[0] = getTexture("assets/texture.png");          // TODO: use actual linking
-        mat->m_maps[2] = getTexture("assets/extension.png");
+        model = getModelObject("model.obj");
+
+        mat->m_maps[1] = getTextureIndex("assets/normal.png");
+        mat->m_maps[0] = getTextureIndex("assets/texture.png");
+        mat->m_maps[2] = getTextureIndex("assets/extension.png");
         mat->m_Ks.w = 10;
+        model->materialIndex = idx;
+        //s_models[0].materialIndex = idx;
 
-        if ((idx = createMaterial("Material1")) < 0) {
+        if ((idx = createMaterialObject(":Material1", &mat)) < 0) {
             std::cerr << "Failed to setup materials" << std::endl;
             return -1;
         }
 
-        mat = &s_materials[idx];
-        // LOL
-        mat->m_maps[1] = getTexture("assets/terrain.png");
-        mat->m_maps[0] = getTexture("assets/terrain.png");
+        model = getModelObject("terrain.obj");
+        mat->m_maps[0] = getTextureIndex("assets/terrain.png");
         mat->m_Ks.w = 1e10;
 
-        s_models[0].materialIndex = idx - 1;
-        s_models[1].materialIndex = idx;             // No material, testing purposes
+        model->materialIndex = idx;
     }
 
-    glBindBuffer(GL_UNIFORM_BUFFER, s_materialBufferID);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(s_materials), &s_materials, GL_STATIC_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    //glBindBuffer(GL_UNIFORM_BUFFER, s_materialBufferID);
+    //glBufferData(GL_UNIFORM_BUFFER, sizeof(s_materials), &s_materials, GL_STATIC_DRAW);
+    //glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    uploadMaterials(s_materialBufferID);
     glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_MATERIALS, s_materialBufferID);
 
     std::cout << "Loading complete" << std::endl;
@@ -328,18 +224,10 @@ int loadTextures(void) {
         }
     }
 
-    //std::cout << "Velocity map " << 0 << ": " << s_sceneTextures[2] << std::endl;
-    //s_textureHandles[textureIndex(S_VELOCITY_BUFFER)] = glGetTextureHandleARB(s_sceneTextures[2]);
-    //if (glGetError()) {
-        //std::cerr << "Failed to generate velocity map handle" << std::endl;
-        //return -1;
-    //}
-    //glMakeTextureHandleResidentARB(s_textureHandles[textureIndex(S_VELOCITY_BUFFER)]);
-
     GLuint undefinedTextureID;
     glGenTextures(1, &undefinedTextureID);
 
-    if (loadTextureID(undefinedTextureID, "assets/undefined.png", GL_NEAREST, GL_NEAREST) != 0) {
+    if (loadTextureFixed(undefinedTextureID, "assets/undefined.png", GL_NEAREST, GL_NEAREST) != 0) {
         std::cout << "Failed to load \"undefined\"" << std::endl;
         return -1;
     }
@@ -352,27 +240,20 @@ int loadTextures(void) {
     glMakeTextureHandleResidentARB(undefinedTextureHandle);
     s_textureHandles[textureIndex(S_TEXTURE_UNDEFINED)] = undefinedTextureHandle;
 
-    glGenTextures(5, s_textureIDs);
-    std::list<std::string> textures {
+    std::vector<std::string> textures {
         "assets/texture.png",
         "assets/normal.png",
         "assets/terrain.png",
         "assets/smoke.png",
         "assets/extension.png"
     };
-    int *indices = new int[5];
-
-    if (loadTextureMulti(indices, textures) != 0) {
-        delete indices;
-        return -1;
-    }
 
     for (int j = 0; j < 5; ++j) {
-        int i = indices[j];
-        GLuint texID = s_textureIDs[i];
+        int i = loadTexture(textures[j]);
+        GLuint texID = getTextureID(i);
         GLuint texHandle = glGetTextureHandleARB(texID);
         if ((e = glGetError())) {
-            std::cerr << "Failed to get texture handle for " << i << std::endl;
+            std::cerr << "Failed to get texture handle for " << i << ":" << texID << std::endl;
             return -1;
         }
 
@@ -380,8 +261,6 @@ int loadTextures(void) {
 
         s_textureHandles[textureIndex(i)] = texHandle;
     }
-
-    delete indices;
 
     glGenBuffers(1, &s_textureHandleBufferID);
 
@@ -392,8 +271,6 @@ int loadTextures(void) {
 
     return 0;
 }
-
-
 
 void rmObject(int index) {
     const auto &obj = s_objects[index];
@@ -410,9 +287,12 @@ void rmObject(int index) {
 
 void addObject(int modelID, glm::vec3 pos, glm::vec3 vel, glm::vec3 rot) {
     int index = s_indirectCommands.size;
+    Model *model = getModelObject(modelID);
 
-    s_indirectCommands.append({ s_models[modelID].size, 1, s_models[modelID].begin, 0 });
-    s_meshAttribs.append({ s_models[modelID].materialIndex, {}, glm::vec4(vel, 0) });
+    assert(model != nullptr);
+
+    s_indirectCommands.append({ model->size, 1, model->begin, 0 });
+    s_meshAttribs.append({ model->materialIndex, {}, glm::vec4(vel, 0) });
     s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), pos), rot.y, { 0, 1, 0 }));
 
     s_objects.push_back({

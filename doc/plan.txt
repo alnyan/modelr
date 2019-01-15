@@ -1,0 +1,3 @@
+0. Refactor main.cpp into multiple source files for readability
+1. Text rendering
+2. UI rendering

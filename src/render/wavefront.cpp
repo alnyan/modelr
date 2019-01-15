@@ -162,8 +162,12 @@ static bool wfQuad(MeshBuilder *mesh,
     return true;
 }
 
-bool Wavefront::loadObj(Model *model, GLuint &mat, MeshBuilder *mesh, const char *path) {
+bool Wavefront::loadObj(Model *model, std::list<std::string> *reqMaterials, MeshBuilder *mesh, const std::string &path) {
     // TODO: material loading
+    if (reqMaterials) {
+        reqMaterials->clear();
+    }
+
     std::ifstream file(Assets::getModelPath(path));
     std::vector<glm::vec3> vertexData;
     std::vector<glm::vec2> texCoordData;
