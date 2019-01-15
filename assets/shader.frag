@@ -91,7 +91,7 @@ LightParams mLights[1] = {
 };
 
 // Hardcoded params (yet)
-const float ambientIntensity = 0.2;
+const float ambientIntensity = 0.1;
 
 const vec3 fogColor = vec3(0, 0.25, 0.25);
 const float fogDensity = 0.05;
@@ -200,7 +200,9 @@ void main() {
     vec3 vel = mMeshAttribs[mDrawID].mVelocity.xyz - mCameraVelocity;
     int m_map_Kd = S_TEXTURE_UNDEFINED;
     int m_map_Bump = -1;
+    int m_map_Ext = -1;
     float m_Ns = 100;
+    float em = 0;
 
     if (matIndex >= 0) {
         m_map_Kd = mMaterials[matIndex].m_maps.x;
@@ -208,6 +210,7 @@ void main() {
             m_map_Kd = S_TEXTURE_UNDEFINED;
         }
         m_map_Bump = mMaterials[matIndex].m_maps.y;
+        m_map_Ext = mMaterials[matIndex].m_maps.z;
 
         m_Ns = mMaterials[matIndex].m_Ks.w;
     }
@@ -219,7 +222,9 @@ void main() {
     baseKd = texture(mTextures[m_map_Kd], mSourceTexCoord).rgb;
 
     if (m_map_Bump >= 0) {
-        mapNormal = normalize(texture(mTextures[m_map_Bump], mSourceTexCoord).rgb * 2.0 - vec3(1.0));
+        vec3 textureNormal = texture(mTextures[m_map_Bump], mSourceTexCoord).rgb * 2.0 - vec3(1.0);
+
+        mapNormal = normalize((mModelMatrices[mDrawID] * vec4(textureNormal, 0)).xyz);
 
         matTBN = transpose(mat3(
             normalize(mSourceTangent),
@@ -231,11 +236,20 @@ void main() {
         matTBN = mat3(1);
     }
 
+    if (m_map_Ext >= 0 && m_map_Ext != S_TEXTURE_UNDEFINED) {
+        vec3 extParams = texture(mTextures[m_map_Ext], mSourceTexCoord).rgb;
+
+        // R channel is specular map
+        m_Ns /= extParams.r;
+        // G channel is emissive map
+        em = extParams.g;
+    }
+
     vec4 projVel = mProjectionMatrix * mCameraMatrix * vec4(vel, 0);
 
     velColor = vec3(projVel.xy, 0);
 
-    color = baseKd * ambientIntensity;
+    color = (em * 0.8 + ambientIntensity) * baseKd;
     vec3 eyeDir = normalize(matTBN * (-(mCameraDestination - mCameraPosition)).xyz);
 
     for (int i = 0; i < mLights.length(); ++i) {

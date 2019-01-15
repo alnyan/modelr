@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 
 struct GameObject {
-    glm::vec3 pos, vel;
+    glm::vec3 pos, vel, rot;
     int dataIndex;
 
     glm::mat4 getMatrix() const {

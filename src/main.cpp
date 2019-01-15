@@ -285,7 +285,8 @@ int loadData(void) {
         mat = &s_materials[idx];
         mat->m_maps[1] = getTexture("assets/normal.png");
         mat->m_maps[0] = getTexture("assets/texture.png");          // TODO: use actual linking
-        mat->m_Ks.w = 1;
+        mat->m_maps[2] = getTexture("assets/extension.png");
+        mat->m_Ks.w = 10;
 
         if ((idx = createMaterial("Material1")) < 0) {
             std::cerr << "Failed to setup materials" << std::endl;
@@ -351,21 +352,22 @@ int loadTextures(void) {
     glMakeTextureHandleResidentARB(undefinedTextureHandle);
     s_textureHandles[textureIndex(S_TEXTURE_UNDEFINED)] = undefinedTextureHandle;
 
-    glGenTextures(4, s_textureIDs);
+    glGenTextures(5, s_textureIDs);
     std::list<std::string> textures {
         "assets/texture.png",
         "assets/normal.png",
         "assets/terrain.png",
-        "assets/smoke.png"
+        "assets/smoke.png",
+        "assets/extension.png"
     };
-    int *indices = new int[4];
+    int *indices = new int[5];
 
     if (loadTextureMulti(indices, textures) != 0) {
         delete indices;
         return -1;
     }
 
-    for (int j = 0; j < 4; ++j) {
+    for (int j = 0; j < 5; ++j) {
         int i = indices[j];
         GLuint texID = s_textureIDs[i];
         GLuint texHandle = glGetTextureHandleARB(texID);
@@ -406,16 +408,17 @@ void rmObject(int index) {
     }
 }
 
-void addObject(int modelID, glm::vec3 pos, glm::vec3 vel) {
+void addObject(int modelID, glm::vec3 pos, glm::vec3 vel, glm::vec3 rot) {
     int index = s_indirectCommands.size;
 
     s_indirectCommands.append({ s_models[modelID].size, 1, s_models[modelID].begin, 0 });
     s_meshAttribs.append({ s_models[modelID].materialIndex, {}, glm::vec4(vel, 0) });
-    s_modelMatrices.append(glm::mat4(1));
+    s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), pos), rot.y, { 0, 1, 0 }));
 
     s_objects.push_back({
         pos,
         vel,
+        rot,
         index
     });
 }
@@ -429,10 +432,11 @@ int init(void) {
     s_modelMatrices.generate();
 
     // Setup drawcalls
-    addObject(1, { 0, 0, 0 }, { 0, 0, 0 });
+    addObject(1, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
+    addObject(0, { 20, 20, 20 }, { 0, 0, 0 }, { 0, 0, 0 });
 
     for (int i = 0; i < 100; ++i) {
-        addObject(0, { rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10 }, { 0, 0, 0 });
+        addObject(0, { rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10 }, { 0, 0, 0 }, { 0, rand() / (float) RAND_MAX, 0 });
     }
 
     return 0;
@@ -445,7 +449,7 @@ int setup_gl(void) {
 
     // Post-processing and render to texture setup
     glGenFramebuffers(1, &s_sceneBuffer);
-    glGenTextures(3, s_sceneTextures);
+    glGenTextures(4, s_sceneTextures);
     glGenRenderbuffers(1, &s_depthBufferID);
 
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
@@ -636,13 +640,13 @@ void update(double t, double dt) {
     updateLight0(t);
 
     if (s_phys) {
-    if (t - s_lastObjectTime > 3) {
-        s_lastObjectTime = t;
-        for (int i = 0; i < 5; ++i)
-        if (s_indirectCommands.size > 1)
-            rmObject(1);
-        std::cout << s_indirectCommands.size << " objects" << std::endl;
-    }
+    //if (t - s_lastObjectTime > 3) {
+        //s_lastObjectTime = t;
+        //for (int i = 0; i < 5; ++i)
+        //if (s_indirectCommands.size > 1)
+            //rmObject(1);
+        //std::cout << s_indirectCommands.size << " objects" << std::endl;
+    //}
 
     if (t - s_lastParticleTime > 0.05) {
         s_lastParticleTime = t;
@@ -669,14 +673,15 @@ void update(double t, double dt) {
     }
 
     for (auto &obj: s_objects) {
-        if (obj.dataIndex == 0) {
+        if (obj.dataIndex < 2) {
             s_meshAttribs[obj.dataIndex].vel = glm::vec4(0);
             continue;
         }
         obj.pos += obj.vel * (float) dt;
+        obj.rot = glm::vec3(0, glm::cos(t), 0);
         glm::vec3 f = glm::normalize(obj.pos) / (float) glm::pow(glm::length(obj.pos), 2);
         obj.vel += f * (float) dt;
-        s_modelMatrices[obj.dataIndex] = glm::translate(glm::mat4(1), obj.pos);
+        s_modelMatrices[obj.dataIndex] = glm::rotate(glm::translate(glm::mat4(1), obj.pos), obj.rot.y, { 0, 1, 0 });
         s_meshAttribs[obj.dataIndex].vel = glm::vec4(obj.vel, 1);
     }
 
@@ -686,13 +691,18 @@ void update(double t, double dt) {
 ////
 
 void renderScene(void) {
+    auto t0 = glfwGetTime();
     glUseProgram(s_sceneShaderID);
     auto l = glGetUniformLocation(s_sceneShaderID, "mCameraVelocity");
     glUniform3f(l, s_cameraVelocity.x, s_cameraVelocity.y, s_cameraVelocity.z);
+    auto t1 = glfwGetTime();
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
+    s_drawCallTime += glfwGetTime() - t1;
+    s_transferTime += t1 - t0;
 }
 
 void renderLight0(int i) {
+    auto t0 = glfwGetTime();
     glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, s_light0DepthTextureIDs[i], 0);
     glViewport(0, 0, R_SHADOW_MAP_WIDTH, R_SHADOW_MAP_HEIGHT);
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -701,10 +711,14 @@ void renderLight0(int i) {
     auto l = glGetUniformLocation(s_depthShaderID, "mRenderCascade");
     glUniform1i(l, i);
 
+    auto t1 = glfwGetTime();
     glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
+    s_drawCallTime += glfwGetTime() - t1;
+    s_transferTime += t1 - t0;
 }
 
 void renderScreen(void) {
+    auto t0 = glfwGetTime();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, m_width, m_height);
     glUseProgram(s_screenShaderID);
@@ -719,16 +733,20 @@ void renderScreen(void) {
     glBindTextures(0, 3, s_sceneTextures);
     if (s_viewType && s_viewType < 5)
         glBindTexture(GL_TEXTURE_2D, s_light0DepthTextureIDs[s_viewType - 1]);
-    else if (s_viewType == 5)
-        glBindTexture(GL_TEXTURE_2D, s_sceneTextures[2]);
+    else if (s_viewType >= 5)
+        glBindTexture(GL_TEXTURE_2D, s_sceneTextures[s_viewType - 5 + 2]);
 
     glBindVertexArray(s_screenArrayID);
     glEnableVertexAttribArray(S_ATTRIB_VERTEX);
     glEnableVertexAttribArray(S_ATTRIB_TEXCOORD);
+    auto t1 = glfwGetTime();
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glDisableVertexAttribArray(S_ATTRIB_TEXCOORD);
     glDisableVertexAttribArray(S_ATTRIB_VERTEX);
     glBindVertexArray(0);
+
+    s_drawCallTime += glfwGetTime() - t1;
+    s_transferTime += t1 - t0;
 }
 
 void render(void) {
@@ -738,6 +756,7 @@ void render(void) {
 
     update(t, dt);
 
+    auto t0 = glfwGetTime();
     glNamedBufferData(s_sceneUniformBufferID, sizeof(SceneUniformData), &s_sceneUniformData, GL_DYNAMIC_DRAW);
     glNamedBufferData(s_sceneLight0UniformBufferID, sizeof(SceneLight0UniformData), &s_light0UniformData, GL_DYNAMIC_DRAW);
 
@@ -756,9 +775,11 @@ void render(void) {
 
     glCullFace(GL_FRONT);
     glBindFramebuffer(GL_FRAMEBUFFER, s_light0FramebufferID);
+    auto t1 = glfwGetTime();
     for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         renderLight0(i);
     }
+    auto t2 = glfwGetTime();
     glCullFace(GL_BACK);
 
     // BLAST 2: PLAYER'S CAMERA
@@ -766,8 +787,10 @@ void render(void) {
     glViewport(0, 0, m_width, m_height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    auto t3 = glfwGetTime();
     renderScene();
 
+    auto t4 = glfwGetTime();
     // BLAST 3: PARTICLES
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
     glDisableVertexAttribArray(S_ATTRIB_BITANGENT);
@@ -786,7 +809,9 @@ void render(void) {
     glDepthMask(GL_FALSE);
     auto l = glGetUniformLocation(s_sceneBillboardShaderID, "mTime");
     glUniform1f(l, t);
+    auto t5 = glfwGetTime();
     glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 6, R_PARTICLE_MAX, 0);
+    auto t6 = glfwGetTime();
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
 
@@ -797,11 +822,13 @@ void render(void) {
     // END RENDER
     glUseProgram(0);
 
+    auto t7 = glfwGetTime();
     renderScreen();
 
     auto r = glfwGetTime();
 
     s_frameTimeSum += r - t;
+    s_transferTime += (t7 - t6) + (t5 - t4) + (t3 - t2) + (t1 - t0);
 }
 
 //
@@ -919,6 +946,7 @@ int main() {
         return -1;
     }
     auto t0 = glfwGetTime();
+    double swapTime = 0;
     int frames = 0;
 
     while (!glfwWindowShouldClose(s_window)) {
@@ -929,17 +957,21 @@ int main() {
             std::cout << (s_frameTimeSum / frames) * 1000 << " ms/frame" << std::endl;
             std::cout << (s_drawCallTime / frames) * 1000 << " ms/draw" << std::endl;
             std::cout << (s_transferTime / frames) * 1000 << " ms/xfer" << std::endl;
+            std::cout << (swapTime / frames) * 1000 << " ms/swap" << std::endl;
             t0 = t1;
             frames = 0;
             s_frameTimeSum = 0;
             s_drawCallTime = 0;
             s_transferTime = 0;
+            swapTime = 0;
         }
 
         render();
         ++frames;
 
+        t1 = glfwGetTime();
         glfwSwapBuffers(s_window);
+        swapTime += glfwGetTime() - t1;
         glfwPollEvents();
     }
 

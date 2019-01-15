@@ -29,11 +29,12 @@ void main() {
     mat4 mModelMatrix = mModelMatrices[gl_DrawIDARB];
     mDrawID = gl_DrawIDARB;
 
+    mSourceNormal = normalize((mModelMatrix * vec4(mNormal, 0.0)).xyz);
     mSourceVertex = (mModelMatrix * vec4(mVertex, 1.0)).xyz;
-    mSourceNormal = mNormal;
-    mSourceTexCoord = mTexCoord;
-    mSourceTangent = mTangent;
-    mSourceBitangent = mBitangent;
 
-    gl_Position = mProjectionMatrix * mCameraMatrix * mModelMatrix * vec4(mVertex, 1.0);
+    mSourceTexCoord = mTexCoord;
+    mSourceTangent = normalize((mModelMatrix * vec4(mTangent, 0.0)).xyz);
+    mSourceBitangent = normalize((mModelMatrix * vec4(mBitangent, 0.0)).xyz);
+
+    gl_Position = mProjectionMatrix * mCameraMatrix * vec4(mSourceVertex, 1);
 }
