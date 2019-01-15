@@ -69,8 +69,6 @@ struct Particle {
     glm::vec4 vel;
     glm::ivec4 opts;
     float t, t0, u, v;
-
-    bool operator <(const Particle &other) const;
 };
 
 ////

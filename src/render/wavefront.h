@@ -12,6 +12,8 @@ namespace Wavefront {
 /**
  * @brief Loads model mesh data from .obj file
  */
-bool loadObj(Model *m, std::list<std::string> *reqMaterials, MeshBuilder *mesh, const std::string &file);
+int loadObj(MeshBuilder *mesh, const std::string &file);
+
+int loadMtl(const std::string &file);
 
 };

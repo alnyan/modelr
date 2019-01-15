@@ -8,6 +8,7 @@
 #include <list>
 #include <map>
 
+static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
 static GLuint s_textureIDs[S_TEXTURE_COUNT];
 static MaterialUniformData s_materials[S_MATERIAL_COUNT];
 static std::vector<Model> s_models;
@@ -20,6 +21,25 @@ static std::map<std::string, int> s_textureBindings;
 static std::map<std::string, int> s_modelBindings;
 
 ////
+
+int addTextureHandle(int index, GLuint64 handle) {
+    std::cout << "res:textureHandles[" << index << "] = " << handle << std::endl;
+    s_textureHandles[textureIndex(index)] = handle;
+    return 0;
+}
+
+int genTextureHandle(int index, GLuint texID) {
+    GLuint64 handle = glGetTextureHandleARB(texID);
+    if (glGetError()) {
+        std::cerr << "Failed to generate texture handle" << std::endl;
+        return -1;
+    }
+    glMakeTextureHandleResidentARB(handle);
+
+    std::cout << "res:textureHandles[" << index << "] = " << handle << std::endl;
+    s_textureHandles[textureIndex(index)] = handle;
+    return 0;
+}
 
 GLuint getTextureID(int index) {
     return s_textureIDs[index];
@@ -91,6 +111,17 @@ int getTextureIndex(const std::string &name) {
     }
 }
 
+void uploadTextureHandles(GLuint buffer) {
+    std::cout << s_lastTextureIndex << " material-used texture handles" << std::endl;
+    for (int i = 0; i < s_lastTextureIndex; ++i) {
+        genTextureHandle(i, s_textureIDs[i]);
+    }
+
+    glBindBuffer(GL_UNIFORM_BUFFER, buffer);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(s_textureHandles), s_textureHandles, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
+
 ////
 
 int createMaterialObject(const std::string &name, MaterialUniformData **obj) {
@@ -111,13 +142,25 @@ int createMaterialObject(const std::string &name, MaterialUniformData **obj) {
 
         *obj = mat;
         // Initial setup
+
+        std::cout << "res:createMtl " << name<< " = " << idx << std::endl;
         mat->m_maps[1] = S_TEXTURE_UNDEFINED;
         mat->m_maps[2] = S_TEXTURE_UNDEFINED;
         mat->m_maps[0] = S_TEXTURE_UNDEFINED;
-        mat->m_Ks = glm::vec4(0.2, 0.2, 0.2, 100);
+        mat->m_Ks = glm::vec4(1, 1, 1, 100);
+        mat->m_Ka = glm::vec4(0.2, 0.2, 0.2, 0);
 
         return idx;
     }
+}
+
+int getMaterialIndex(const std::string &name) {
+    auto it = s_materialBinding.find(name);
+    if (it == s_materialBinding.end()) {
+        return -1;
+    }
+
+    return it->second;
 }
 
 void uploadMaterials(GLuint buffer) {
@@ -138,6 +181,7 @@ int createModelObject(const std::string &name, Model **mod) {
 
     s_models.push_back({});
     *mod = &s_models[s_lastModelIndex];
+    //(*mod)->materialIndex = -1;
     s_modelBindings[name] = s_lastModelIndex;
 
     return s_lastModelIndex++;
@@ -151,6 +195,14 @@ Model *getModelObject(const std::string &name) {
     return nullptr;
 }
 
+int getModelIndex(const std::string &name) {
+    auto it = s_modelBindings.find(name);
+    if (it == s_modelBindings.end()) {
+        return -1;
+    }
+    return it->second;
+}
+
 Model *getModelObject(int index) {
     if (index < 0 || index >= s_models.size()) {
         return nullptr;
@@ -162,16 +214,8 @@ Model *getModelObject(int index) {
 int loadModel(MeshBuilder *mesh, const std::string &file) {
     std::cout << "loadModel " << file << std::endl;
     int res;
-    Model *mod;
 
-    if (createModelObject(file, &mod) < 0) {
-        std::cerr << "Failed to create new model object" << std::endl;
-        return -1;
-    }
+    res = Wavefront::loadObj(mesh, file); // TODO: material linking
 
-    res = Wavefront::loadObj(mod, nullptr, mesh, file); // TODO: material linking
-
-    std::cout << "Loaded" << std::endl;
-
-    return -!res;
+    return res;
 }

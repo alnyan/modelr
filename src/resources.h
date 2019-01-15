@@ -7,10 +7,15 @@
 
 ////
 
+int addTextureHandle(int index, GLuint64 handle);
+int genTextureHandle(int index, GLuint texID);
+
 GLuint getTextureID(int index);
 int getTextureIndex(const std::string &name);
 int loadTextureFixed(GLuint id, const std::string &name, GLuint minOpt = GL_LINEAR_MIPMAP_LINEAR, GLuint magOpt = GL_LINEAR);
 int loadTexture(const std::string &name, GLuint minOpt = GL_LINEAR_MIPMAP_LINEAR, GLuint magOpt = GL_LINEAR);
+
+void uploadTextureHandles(GLuint buffer);
 
 ////
 

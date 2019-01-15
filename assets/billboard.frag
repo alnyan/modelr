@@ -27,8 +27,8 @@ void main() {
     float mLifetime = mTime - mParticles[mInstanceID].t0;
 
     float trMod = (mLifespan - mLifetime) / mLifespan;
-    vec3 rgb = texture(mTextures[3], mSourceTexCoord).rgb;
-    float a = clamp(texture(mTextures[3], mSourceTexCoord).a * trMod, 0, 1);
+    vec3 rgb = texture(mTextures[0], mSourceTexCoord).rgb;
+    float a = clamp(texture(mTextures[0], mSourceTexCoord).a * trMod, 0, 1);
 
     //color = vec4(1, 0, 0, 1);
     //color = vec4(trMod, trMod, trMod, 1);

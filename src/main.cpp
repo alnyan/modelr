@@ -44,7 +44,7 @@ static MeshBuilder *s_allGeometryBuilder;
 // Resources
 static GLuint s_textureHandleBufferID,
               s_materialBufferID;
-static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
+//static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
 
 // Scene-global data
 static GLuint s_sceneUniformBufferID;
@@ -151,6 +151,8 @@ int loadData(void) {
         return -1;
     }
 
+    loadTexture("assets/smoke.png");
+
     glGenVertexArrays(1, &s_allGeometryArrayID);
     s_allGeometryBuilder = new MeshBuilder(s_allGeometryArrayID);
     s_allGeometryBuilder->begin();
@@ -163,44 +165,18 @@ int loadData(void) {
         std::cout << "Failed to load models" << std::endl;
         return -1;
     }
+    if (loadModel(s_allGeometryBuilder, "multipart.obj")) {
+        std::cout << "Failed to load models" << std::endl;
+        return -1;
+    }
+    if (loadModel(s_allGeometryBuilder, "garage.obj")) {
+        std::cout << "Failed to load models" << std::endl;
+        return -1;
+    }
 
     s_allGeometryBuilder->commit();
 
     glGenBuffers(1, &s_materialBufferID);
-    // Create materials for the two models
-    {
-        MaterialUniformData *mat;
-        Model *model;
-        int idx;
-        if ((idx = createMaterialObject(":Material0", &mat)) < 0) {
-            std::cerr << "Failed to setup materials" << std::endl;
-            return -1;
-        }
-
-        model = getModelObject("model.obj");
-
-        mat->m_maps[1] = getTextureIndex("assets/normal.png");
-        mat->m_maps[0] = getTextureIndex("assets/texture.png");
-        mat->m_maps[2] = getTextureIndex("assets/extension.png");
-        mat->m_Ks.w = 10;
-        model->materialIndex = idx;
-        //s_models[0].materialIndex = idx;
-
-        if ((idx = createMaterialObject(":Material1", &mat)) < 0) {
-            std::cerr << "Failed to setup materials" << std::endl;
-            return -1;
-        }
-
-        model = getModelObject("terrain.obj");
-        mat->m_maps[0] = getTextureIndex("assets/terrain.png");
-        mat->m_Ks.w = 1e10;
-
-        model->materialIndex = idx;
-    }
-
-    //glBindBuffer(GL_UNIFORM_BUFFER, s_materialBufferID);
-    //glBufferData(GL_UNIFORM_BUFFER, sizeof(s_materials), &s_materials, GL_STATIC_DRAW);
-    //glBindBuffer(GL_UNIFORM_BUFFER, 0);
     uploadMaterials(s_materialBufferID);
     glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_MATERIALS, s_materialBufferID);
 
@@ -210,64 +186,16 @@ int loadData(void) {
 
 int loadTextures(void) {
     int e;
+
     for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
         std::cout << "Shadow map " << i << ": " << s_light0DepthTextureIDs[i] << std::endl;
-        s_textureHandles[textureIndex(i + S_SHADOW_MAP_0)] = glGetTextureHandleARB(s_light0DepthTextureIDs[i]);
-        if (glGetError()) {
-            std::cerr << "Failed to get shadow map handle" << std::endl;
+
+        if (genTextureHandle(i + S_SHADOW_MAP_0, s_light0DepthTextureIDs[i]) != 0) {
             return -1;
         }
-        glMakeTextureHandleResidentARB(s_textureHandles[textureIndex(i + S_SHADOW_MAP_0)]);
-        if (glGetError()) {
-            std::cerr << "Failed to get shadow map handle" << std::endl;
-            return -1;
-        }
-    }
-
-    GLuint undefinedTextureID;
-    glGenTextures(1, &undefinedTextureID);
-
-    if (loadTextureFixed(undefinedTextureID, "assets/undefined.png", GL_NEAREST, GL_NEAREST) != 0) {
-        std::cout << "Failed to load \"undefined\"" << std::endl;
-        return -1;
-    }
-
-    GLuint undefinedTextureHandle = glGetTextureHandleARB(undefinedTextureID);
-    if (glGetError()) {
-        std::cerr << "Failed to get undefined texture handle" << std::endl;
-        return -1;
-    }
-    glMakeTextureHandleResidentARB(undefinedTextureHandle);
-    s_textureHandles[textureIndex(S_TEXTURE_UNDEFINED)] = undefinedTextureHandle;
-
-    std::vector<std::string> textures {
-        "assets/texture.png",
-        "assets/normal.png",
-        "assets/terrain.png",
-        "assets/smoke.png",
-        "assets/extension.png"
-    };
-
-    for (int j = 0; j < 5; ++j) {
-        int i = loadTexture(textures[j]);
-        GLuint texID = getTextureID(i);
-        GLuint texHandle = glGetTextureHandleARB(texID);
-        if ((e = glGetError())) {
-            std::cerr << "Failed to get texture handle for " << i << ":" << texID << std::endl;
-            return -1;
-        }
-
-        glMakeTextureHandleResidentARB(texHandle);
-
-        s_textureHandles[textureIndex(i)] = texHandle;
     }
 
     glGenBuffers(1, &s_textureHandleBufferID);
-
-    glBindBuffer(GL_UNIFORM_BUFFER, s_textureHandleBufferID);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(s_textureHandles), s_textureHandles, GL_STATIC_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_TEXTURES, s_textureHandleBufferID);
 
     return 0;
 }
@@ -275,31 +203,45 @@ int loadTextures(void) {
 void rmObject(int index) {
     const auto &obj = s_objects[index];
 
-    s_indirectCommands.remove(obj.dataIndex);
-    s_meshAttribs.remove(obj.dataIndex);
-    s_modelMatrices.remove(obj.dataIndex);
+    for (int dataIndex: obj.dataIndices) {
+        s_indirectCommands.remove(dataIndex);
+        s_meshAttribs.remove(dataIndex);
+        s_modelMatrices.remove(dataIndex);
 
-    s_objects.erase(s_objects.begin() + index);
-    for (int i = index; i < s_objects.size(); ++i) {
-        --s_objects[i].dataIndex;
+        s_objects.erase(s_objects.begin() + index);
+        for (int i = index; i < s_objects.size(); ++i) {
+            for (auto it = s_objects[i].dataIndices.begin(); it != s_objects[i].dataIndices.end(); ++it) {
+                --*it;
+            }
+        }
     }
 }
 
 void addObject(int modelID, glm::vec3 pos, glm::vec3 vel, glm::vec3 rot) {
-    int index = s_indirectCommands.size;
     Model *model = getModelObject(modelID);
 
     assert(model != nullptr);
 
-    s_indirectCommands.append({ model->size, 1, model->begin, 0 });
-    s_meshAttribs.append({ model->materialIndex, {}, glm::vec4(vel, 0) });
-    s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), pos), rot.y, { 0, 1, 0 }));
+    std::list<int> partIndices;
+
+    for (const Part &part: model->parts) {
+        int index = s_indirectCommands.size;
+
+        std::cout << "Add part " << index << std::endl;
+        std::cout << "Part size " << part.size << ": " << part.begin << std::endl;
+
+        s_indirectCommands.append({ part.size, 1, part.begin, 0 });
+        s_meshAttribs.append({ part.materialIndex, {}, glm::vec4(vel, 0) });
+        s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), pos), rot.y, { 0, 1, 0 }));
+
+        partIndices.push_back(index);
+    }
 
     s_objects.push_back({
         pos,
         vel,
         rot,
-        index
+        partIndices
     });
 }
 
@@ -314,10 +256,8 @@ int init(void) {
     // Setup drawcalls
     addObject(1, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
     addObject(0, { 20, 20, 20 }, { 0, 0, 0 }, { 0, 0, 0 });
-
-    for (int i = 0; i < 100; ++i) {
-        addObject(0, { rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10, rand() / (float) RAND_MAX * 10 }, { 0, 0, 0 }, { 0, rand() / (float) RAND_MAX, 0 });
-    }
+    addObject(getModelIndex("multipart.obj"), { 10, 10, 10 }, glm::vec3(0), glm::vec3(0));
+    addObject(getModelIndex("garage.obj"), { -10, 0, 0 }, glm::vec3(0), glm::vec3(0));
 
     return 0;
 }
@@ -401,7 +341,6 @@ int setup_gl(void) {
     glBindBuffer(GL_UNIFORM_BUFFER, s_sceneUniformBufferID);
     glBufferData(GL_UNIFORM_BUFFER, sizeof(s_sceneUniformData), &s_sceneUniformData, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
 
     // Light0 buffer
     glGenBuffers(1, &s_sceneLight0UniformBufferID);
@@ -520,51 +459,29 @@ void update(double t, double dt) {
     updateLight0(t);
 
     if (s_phys) {
-    //if (t - s_lastObjectTime > 3) {
-        //s_lastObjectTime = t;
-        //for (int i = 0; i < 5; ++i)
-        //if (s_indirectCommands.size > 1)
-            //rmObject(1);
-        //std::cout << s_indirectCommands.size << " objects" << std::endl;
-    //}
+        if (t - s_lastParticleTime > 0.05) {
+            s_lastParticleTime = t;
+            auto r0 = rand() / (float) RAND_MAX;
+            auto r1 = rand() / (float) RAND_MAX;
+            auto r2 = rand() / (float) RAND_MAX;
+            auto r3 = rand() / (float) RAND_MAX;
 
-    if (t - s_lastParticleTime > 0.05) {
-        s_lastParticleTime = t;
-        auto r0 = rand() / (float) RAND_MAX;
-        auto r1 = rand() / (float) RAND_MAX;
-        auto r2 = rand() / (float) RAND_MAX;
-        auto r3 = rand() / (float) RAND_MAX;
+            float y = 0.06;
+            float sx = 0.005;
+            float sy = 0.1;
 
-        float y = 0.06;
-        float sx = 0.005;
-        float sy = 0.1;
-
-        addParticle({ 6 + r2 * sy * 2 - sy, 1, 6 + r3 * sy * 2 - sy }, { r0 * sx * 2 - sx, y, r1 * sx * 2 - sx }, t, 6);
-    }
-
-    for (int i = 0; i < R_PARTICLE_MAX; ++i) {
-        Particle &p = s_particles[i];
-
-        if ((t - p.t0) - p.t > 0 || p.t < 1 || p.t0 == 0) {
-        } else {
-            p.pos += p.vel;
-            p.vel *= 0.9998;
+            addParticle({ 6 + r2 * sy * 2 - sy, 1, 6 + r3 * sy * 2 - sy }, { r0 * sx * 2 - sx, y, r1 * sx * 2 - sx }, t, 6);
         }
-    }
 
-    for (auto &obj: s_objects) {
-        if (obj.dataIndex < 2) {
-            s_meshAttribs[obj.dataIndex].vel = glm::vec4(0);
-            continue;
+        for (int i = 0; i < R_PARTICLE_MAX; ++i) {
+            Particle &p = s_particles[i];
+
+            if ((t - p.t0) - p.t > 0 || p.t < 1 || p.t0 == 0) {
+            } else {
+                p.pos += p.vel;
+                p.vel *= 0.9998;
+            }
         }
-        obj.pos += obj.vel * (float) dt;
-        obj.rot = glm::vec3(0, glm::cos(t), 0);
-        glm::vec3 f = glm::normalize(obj.pos) / (float) glm::pow(glm::length(obj.pos), 2);
-        obj.vel += f * (float) dt;
-        s_modelMatrices[obj.dataIndex] = glm::rotate(glm::translate(glm::mat4(1), obj.pos), obj.rot.y, { 0, 1, 0 });
-        s_meshAttribs[obj.dataIndex].vel = glm::vec4(obj.vel, 1);
-    }
-
     }
 }
 
@@ -825,6 +742,10 @@ int main() {
         glfwTerminate();
         return -1;
     }
+
+    uploadTextureHandles(s_textureHandleBufferID);
+    glBindBufferBase(GL_UNIFORM_BUFFER, S_UBO_TEXTURES, s_textureHandleBufferID);
+
     auto t0 = glfwGetTime();
     double swapTime = 0;
     int frames = 0;

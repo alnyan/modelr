@@ -10,4 +10,5 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 1
-map_Kd height.png
+map_Bump normal.png
+map_Kd terrain.png

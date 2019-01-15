@@ -139,13 +139,14 @@ vec3 funSpecularDir(vec3 lightDir,
                    vec3 lightColor,
                    float lightIntensity,
                    float specularExp,
+                   vec3 specularInt,
                    vec3 normal,
                    vec3 eyeDir) {
     vec3 rayReflect = normalize(reflect(-lightDir, normal));
 
     float cosAlpha = clamp(dot(rayReflect, eyeDir), 0, 1);
 
-    return lightIntensity * lightColor * pow(cosAlpha, specularExp);
+    return 100 * specularInt * lightIntensity * lightColor * pow(cosAlpha, specularExp);
 }
 
 ////
@@ -202,6 +203,7 @@ void main() {
     int m_map_Bump = -1;
     int m_map_Ext = -1;
     float m_Ns = 100;
+    vec3 m_Ks = vec3(0, 0, 0);
     float em = 0;
 
     if (matIndex >= 0) {
@@ -213,6 +215,7 @@ void main() {
         m_map_Ext = mMaterials[matIndex].m_maps.z;
 
         m_Ns = mMaterials[matIndex].m_Ks.w;
+        m_Ks = mMaterials[matIndex].m_Ks.xyz;
     }
 
     vec3 baseKd;
@@ -221,7 +224,7 @@ void main() {
 
     baseKd = texture(mTextures[m_map_Kd], mSourceTexCoord).rgb;
 
-    if (m_map_Bump >= 0) {
+    if (m_map_Bump >= 0 && m_map_Bump != S_TEXTURE_UNDEFINED) {
         vec3 textureNormal = texture(mTextures[m_map_Bump], mSourceTexCoord).rgb * 2.0 - vec3(1.0);
 
         mapNormal = normalize((mModelMatrices[mDrawID] * vec4(textureNormal, 0)).xyz);
@@ -260,7 +263,7 @@ void main() {
         } else {
             vec3 lightDir = matTBN * normalize(-mLights[i].mLightPos.xyz);
             color += visibility * funDiffuseDir(baseKd, lightDir, mLights[i].mLightColor, mLights[i].mLightIntensity, mapNormal);
-            color += visibility * funSpecularDir(lightDir, mLights[i].mLightColor, mLights[i].mLightIntensity, m_Ns, mapNormal, eyeDir);
+            color += visibility * funSpecularDir(lightDir, mLights[i].mLightColor, mLights[i].mLightIntensity, m_Ns, m_Ks, mapNormal, eyeDir);
         }
     }
 }

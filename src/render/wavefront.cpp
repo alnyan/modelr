@@ -1,5 +1,6 @@
 #include "wavefront.h"
 #include "../res/assets.h"
+#include "../resources.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -162,13 +163,92 @@ static bool wfQuad(MeshBuilder *mesh,
     return true;
 }
 
-bool Wavefront::loadObj(Model *model, std::list<std::string> *reqMaterials, MeshBuilder *mesh, const std::string &path) {
-    // TODO: material loading
-    if (reqMaterials) {
-        reqMaterials->clear();
+int Wavefront::loadMtl(const std::string &path) {
+    std::ifstream file(Assets::getModelPath(path));
+    std::string line, mtlName;
+
+    if (!file) {
+        std::cout << "Failed to open " << path << std::endl;
+        return -1;
     }
 
+    std::cout << "Load material " << path << std::endl;
+
+    MaterialUniformData *mtl = nullptr;
+    std::string materialName;
+
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        const char *l = line.c_str();
+
+        std::string fun(l, strchrnul(l, ' '));
+
+        if (fun == "newmtl") {
+            char name[1024];
+            sscanf(l, "newmtl %s", name);
+
+            // Begin new material
+            if (mtl) {
+                std::cout << "#endmtl " << path << ":" << materialName << std::endl;
+            }
+
+            materialName = name;
+            if (createMaterialObject(path + ":" + materialName, &mtl) < 0) {
+                std::cout << "Failed to create new material \"" << path << ":" << materialName << "\"" << std::endl;
+                return -1;
+            }
+
+            std::cout << "#newmtl " << path << ":" << materialName << std::endl;
+        } else if (fun == "map_Kd") {
+            assert(mtl);
+
+            char name[1024];
+            sscanf(l, "map_Kd %s", name);
+
+            // Load new texture
+            int map_Kd_idx = loadTexture(Assets::getTexturePath(name));
+
+            if (map_Kd_idx < 0) {
+                std::cout << "Failed to load diffuse map: " << name << std::endl;
+            } else {
+                std::cout << "#map_Kd " << materialName << " : " << name << " : " << map_Kd_idx << std::endl;
+                mtl->m_maps[0] = map_Kd_idx;
+            }
+        } else if (fun == "map_Bump") {
+            assert(mtl);
+
+            char name[1024];
+            sscanf(l, "map_Bump %s", name);
+
+            int map_Bump_idx = loadTexture(Assets::getTexturePath(name));
+
+            if (map_Bump_idx < 0) {
+                std::cout << "Failed to load bump map: " << name << std::endl;
+            } else {
+                std::cout << "#map_Bump " << materialName << " : " << name << " : " << map_Bump_idx << std::endl;
+                mtl->m_maps[1] = map_Bump_idx;
+            }
+        } else if (fun == "Ks") {
+            assert(mtl);
+
+            sscanf(l, "Ks %f %f %f", &mtl->m_Ks.x, &mtl->m_Ks.y, &mtl->m_Ks.z);
+        }
+    }
+
+    if (mtl) {
+        std::cout << "#endmtl " << path << ":" << materialName << std::endl;
+    }
+
+    return 0;
+}
+
+int Wavefront::loadObj(MeshBuilder *mesh, const std::string &path) {
+    // TODO: material loading
     std::ifstream file(Assets::getModelPath(path));
+    std::string mtllib, partName;
     std::vector<glm::vec3> vertexData;
     std::vector<glm::vec2> texCoordData;
     std::vector<glm::vec3> normalData;
@@ -177,13 +257,25 @@ bool Wavefront::loadObj(Model *model, std::list<std::string> *reqMaterials, Mesh
 
     if (!file) {
         std::cout << "Failed to open " << path << std::endl;
-        return false;
+        return -1;
     }
 
     std::cout << "Load model " << path << std::endl;
 
+    Model *model;
+
+    if (createModelObject(path, &model) < 0 || !model) {
+        return -1;
+    }
+
+    Part *part = nullptr;
+    int partIndex = 0;
+
     // Begin new mesh
-    model->begin = mesh->beginShape();
+    //model->begin = mesh->beginShape();
+
+    // For debugging
+    std::cout << "#model " << path << std::endl;
 
     while (std::getline(file, line)) {
         if (line.empty() || line[0] == '#') {
@@ -207,13 +299,18 @@ bool Wavefront::loadObj(Model *model, std::list<std::string> *reqMaterials, Mesh
             sscanf(l, "vt %f %f", &v.x, &v.y);
             texCoordData.push_back({ v.x, v.y });
         } else if (fun == "f") {
+            if (!part) {
+                std::cerr << "Face belongs to no object/part" << std::endl;
+                return -1;
+            }
+
             // Face specification
             const char *data = l + 2;
             std::list<WfVertexAttribIndex> is;
 
             if (!wfParseFace(data, is)) {
                 std::cerr << "Invalid face:" << std::endl << line << std::endl;
-                return false;
+                return -1;
             }
 
             int vc = is.size();
@@ -222,23 +319,79 @@ bool Wavefront::loadObj(Model *model, std::list<std::string> *reqMaterials, Mesh
             case 3:
                 if (!wfTriangle(mesh, vertexData, texCoordData, normalData, is)) {
                     std::cerr << "Invalid triangle:" << std::endl << line << std::endl;
-                    return false;
+                    return -1;
                 }
                 break;
             case 4:
                 if (!wfQuad(mesh, vertexData, texCoordData, normalData, is)) {
                     std::cerr << "Invalid quad:" << std::endl << line << std::endl;
-                    return false;
+                    return -1;
                 }
                 break;
             default:
                 std::cerr << "Unsupported vertex count per face: " << vc << std::endl;
-                return false;
+                return -1;
             }
+        } else if (fun == "mtllib") {
+            char name[1024];
+            memset(name, 0, sizeof(name));
+            sscanf(l, "mtllib %s", name);
+
+            // Required material file
+            mtllib = name;
+            // Try to load material library
+            if (loadMtl(name) != 0) {
+                std::cerr << "Material loading failed" << std::endl;
+                return -1;
+            }
+        } else if (fun == "usemtl") {
+            assert(part);
+
+            if (part->materialIndex != -1) {
+                std::cerr << "Part already has material assigned" << std::endl;
+                return -1;
+            }
+
+            char name[1024];
+            memset(name, 0, sizeof(name));
+            sscanf(l, "usemtl %s", name);
+
+            // Required material file:name
+            std::cout << "#require " << mtllib << ":" << name << std::endl;
+
+            int mtlIdx = getMaterialIndex(mtllib + ":" + std::string(name));
+
+            if (mtlIdx < 0) {
+                std::cout << "Unknown material: " << mtllib << ":" << name << std::endl;
+            } else {
+                part->materialIndex = mtlIdx;
+            }
+        } else if (fun == "o") {
+            // Object/part
+            char name[1024];
+            memset(name, 0, sizeof(name));
+            sscanf(l, "o %s", name);
+
+            if (part) {
+                part->size = mesh->endShape();
+                std::cout << "#endpart " << partName << ": " << part->size << std::endl;
+            }
+
+            // Create new part
+            model->parts.push_back({});
+            part = &model->parts[partIndex++];
+            part->begin  = mesh->beginShape();
+            part->materialIndex = -1;
+
+            std::cout << "#part " << name << ": " << part->begin << std::endl;
+            partName = name;
         }
     }
 
-    model->size = mesh->endShape();
+    if (part) {
+        part->size = mesh->endShape();
+        std::cout << "#endpart " << partName << ": " << part->size << std::endl;
+    }
 
-    return true;
+    return 0;
 }
