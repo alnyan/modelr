@@ -17,6 +17,14 @@ template<> void GameObject::setCloneable(bool v) {
     m_Cloneable = v;
 }
 
+template<> void GameObject::setLocalPosition(const glm::vec3 &pos) {
+    m_LocalPosition = pos;
+}
+
+template<> void GameObject::setLocalRotation(const glm::quat &rot) {
+    m_LocalRotation = rot;
+}
+
 void GameObject::update(double t, double dt) {
 }
 
@@ -30,4 +38,12 @@ void GameObject::cloneFrom(GameObject *other) {
     m_Parent = other->m_Parent;
     m_LocalPosition = other->m_LocalPosition;
     m_LocalRotation = other->m_LocalRotation;
+}
+
+const glm::vec3 &GameObject::getLocalPosition() const {
+    return m_LocalPosition;
+}
+
+const glm::quat &GameObject::getLocalRotation() const {
+    return m_LocalRotation;
 }

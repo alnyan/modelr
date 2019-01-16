@@ -18,6 +18,28 @@
 
 #include "config.h"
 
+struct DynamicBufferGroup {
+    GlDynamicArray<DrawArraysIndirectCommand, GL_DRAW_INDIRECT_BUFFER, 0xFF> indirectCommands;
+    GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> modelMatrices;
+    GlDynamicArray<MeshAttrib, GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB> meshAttribs;
+
+    void generate() {
+        indirectCommands.generate();
+        modelMatrices.generate();
+        meshAttribs.generate();
+    }
+
+    GLuint getSize() const {
+        return indirectCommands.size;
+    }
+
+    void bind() {
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommands.bufferID);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL, modelMatrices.bufferID);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB, meshAttribs.bufferID);
+    }
+};
+
 //
 
 static GLFWwindow *s_window;
@@ -29,14 +51,14 @@ static int m_width, m_height;
 static GLuint s_particleDataBufferID;
 static Particle *s_particles = nullptr;
 static GLuint s_particleGeometryArrayID;
+static GLuint s_sceneBillboardShaderID;
 
-// Dynamic objects
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
-static GlDynamicArray<DrawArraysIndirectCommand, GL_DRAW_INDIRECT_BUFFER, 0xFF> s_indirectCommands;
-static GlDynamicArray<MeshAttrib, GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB> s_meshAttribs;
-static GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> s_modelMatrices;
-static GLuint s_sceneBillboardShaderID;
+
+// Object groups
+DynamicBufferGroup s_dynamicObjectBuffers;
+DynamicBufferGroup s_staticObjectBuffers;
 
 // Object classes present in scene
 static std::list<ModelObject *> s_dynamicModelObjects;
@@ -205,107 +227,71 @@ int loadTextures(void) {
     return 0;
 }
 
-void addVolatileModelObject(ModelObject *obj) {
-    assert(obj);
-    assert(obj->getModel());
-    assert(obj->getOptimizationClass() == GameObject::OptimizationClass::OPTIMIZE_DYNAMIC_VOLATILE);
-
-    s_volatileModelObjects.push_back(obj);
+int addPartToBuffers(DynamicBufferGroup *group, const Part *p) {
+    int index = group->getSize();
+    group->indirectCommands.append({ p->size, 1, p->begin, 0 });
+    group->meshAttribs.append({ p->materialIndex, {}, glm::vec4(0) });
+    group->modelMatrices.append(glm::mat4(1));
+    return index;
 }
 
-void addDynamicObject(ModelObject *obj) {
+void addDynamicObject(ModelObject *obj, glm::vec3 pos = glm::vec3(0), glm::quat rot = glm::quat()) {
     assert(obj);
     assert(obj->getModel());
-    assert(obj->getOptimizationClass() == GameObject::OptimizationClass::OPTIMIZE_DYNAMIC);
 
     auto instance = cloneGameObject(obj);
+    instance->setLocalPosition(pos);
+    instance->setLocalRotation(rot);
 
-    //// For dynamic objects, use indirect draw buffers
-    //// Add all parts
+    // For dynamic objects, use indirect draw buffers
+    // Add all parts
     for (const auto &part: instance->getModel()->parts) {
-        int index = s_indirectCommands.size;
-        s_indirectCommands.append({ part.size, 1, part.begin, 0 });
-        s_meshAttribs.append({ part.materialIndex, {}, glm::vec4(0) });
-        //s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), instance->getGlobalPosition()), instance->getGlobalRotation()));
-        //s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), instance->getLocalPosition()), instance->getLocalRotation()));
-        s_modelMatrices.append(glm::mat4(1));
-        instance->addPartInstance(index, &s_modelMatrices[index]);
+        int index = addPartToBuffers(&s_dynamicObjectBuffers, &part);
+        instance->addPartInstance(index, &s_dynamicObjectBuffers.modelMatrices[index]);
     }
 
     assert(instance->getPartInstances().size() == instance->getModel()->parts.size());
 
-    s_dynamicModelObjects.push_back(obj);
+    instance->recalcMatrix();
+
+    s_dynamicModelObjects.push_back(instance);
 }
 
-void addStaticObject(ModelObject *obj) {
+void addStaticObject(ModelObject *obj, glm::vec3 pos = glm::vec3(0), glm::quat rot = glm::quat()) {
     assert(obj);
     assert(obj->getModel());
-    assert(obj->getOptimizationClass() == GameObject::OptimizationClass::OPTIMIZE_STATIC);
 
-    s_staticModelObjects.push_back(obj);
+    auto instance = cloneGameObject(obj);
+    instance->setLocalPosition(pos);
+    instance->setLocalRotation(rot);
+
+    // For dynamic objects, use indirect draw buffers
+    // Add all parts
+    for (const auto &part: instance->getModel()->parts) {
+        int index = addPartToBuffers(&s_staticObjectBuffers, &part);
+        instance->addPartInstance(index, &s_staticObjectBuffers.modelMatrices[index]);
+    }
+
+    assert(instance->getPartInstances().size() == instance->getModel()->parts.size());
+
+    instance->recalcMatrix();
+
+    s_staticModelObjects.push_back(instance);
 }
-
-//void rmObject(int index) {
-    //const auto &obj = s_objects[index];
-
-    //for (int dataIndex: obj.dataIndices) {
-        //s_indirectCommands.remove(dataIndex);
-        //s_meshAttribs.remove(dataIndex);
-        //s_modelMatrices.remove(dataIndex);
-
-        //s_objects.erase(s_objects.begin() + index);
-        //for (int i = index; i < s_objects.size(); ++i) {
-            //for (auto it = s_objects[i].dataIndices.begin(); it != s_objects[i].dataIndices.end(); ++it) {
-                //--*it;
-            //}
-        //}
-    //}
-//}
-
-//void addObject(int modelID, glm::vec3 pos, glm::vec3 vel, glm::vec3 rot) {
-    //Model *model = getModelObject(modelID);
-
-    //assert(model != nullptr);
-
-    //std::list<int> partIndices;
-
-    //for (const Part &part: model->parts) {
-        //int index = s_indirectCommands.size;
-
-        //std::cout << "Add part " << index << std::endl;
-        //std::cout << "Part size " << part.size << ": " << part.begin << std::endl;
-
-        //s_indirectCommands.append({ part.size, 1, part.begin, 0 });
-        //s_meshAttribs.append({ part.materialIndex, {}, glm::vec4(vel, 0) });
-        //s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), pos), rot.y, { 0, 1, 0 }));
-
-        //partIndices.push_back(index);
-    //}
-
-    //s_objects.push_back({
-        //pos,
-        //vel,
-        //rot,
-        //partIndices
-    //});
-//}
 
 int init(void) {
     s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
     s_sceneUniformData.m_cameraDestination = glm::vec4(2, 2, 3, 1);
 
-    s_indirectCommands.generate();
-    s_meshAttribs.generate();
-    s_modelMatrices.generate();
+    s_staticObjectBuffers.generate();
+    s_dynamicObjectBuffers.generate();
 
     ModelObject *obj0 = new ModelObject;
-    obj0->setOptimizationClass(GameObject::OptimizationClass::OPTIMIZE_DYNAMIC);
     obj0->setModel(getModelObject("model.obj"));
 
     // Setup drawcalls
-    addDynamicObject(obj0);
-    //addObject(getModelIndex("model.obj"), { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
-    //addObject(getModelIndex("model.obj"), { 4, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
+    addStaticObject(obj0);
+    addDynamicObject(obj0, { 4, 0, 0 }, { 0, 0.38268, 0, 0.92387 });
 
     return 0;
 }
@@ -541,7 +527,14 @@ void renderScene(void) {
     auto l = glGetUniformLocation(s_sceneShaderID, "mCameraVelocity");
     glUniform3f(l, s_cameraVelocity.x, s_cameraVelocity.y, s_cameraVelocity.z);
     auto t1 = glfwGetTime();
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
+
+    // Draw static objects
+    s_staticObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_staticObjectBuffers.getSize(), 0);
+    // Draw dynamic objects
+    s_dynamicObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_dynamicObjectBuffers.getSize(), 0);
+
     s_drawCallTime += glfwGetTime() - t1;
     s_transferTime += t1 - t0;
 }
@@ -557,7 +550,13 @@ void renderLight0(int i) {
     glUniform1i(l, i);
 
     auto t1 = glfwGetTime();
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_indirectCommands.size, 0);
+    // Draw static objects
+    s_staticObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_staticObjectBuffers.getSize(), 0);
+    // Draw dynamic objects
+    s_dynamicObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_dynamicObjectBuffers.getSize(), 0);
+
     s_drawCallTime += glfwGetTime() - t1;
     s_transferTime += t1 - t0;
 }
@@ -611,7 +610,6 @@ void render(void) {
     // BEGIN RENDER
     // BLAST 1: LIGHT'S ORTHO
     glBindVertexArray(s_allGeometryArrayID);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, s_indirectCommands.bufferID);
     glEnableVertexAttribArray(S_ATTRIB_VERTEX);
     glEnableVertexAttribArray(S_ATTRIB_TEXCOORD);
     glEnableVertexAttribArray(S_ATTRIB_NORMAL);

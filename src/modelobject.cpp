@@ -30,3 +30,10 @@ void ModelObject::addPartInstance(int baseIndex, glm::mat4 *modelMatrixStorage) 
 const std::vector<ModelObject::PartInstance> &ModelObject::getPartInstances() const {
     return m_PartInstances;
 }
+
+void ModelObject::recalcMatrix() {
+    for (auto &partInstance: m_PartInstances) {
+        auto tM = glm::translate(glm::mat4(1), getLocalPosition());
+        *(partInstance.modelMatrixStorage) = glm::mat4_cast(getLocalRotation()) * tM;
+    }
+}
