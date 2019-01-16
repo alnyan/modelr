@@ -14,6 +14,7 @@
 #include "render/wavefront.h"
 #include "gldynamicarray.h"
 #include "resources.h"
+#include "modelobject.h"
 
 #include "config.h"
 
@@ -37,7 +38,11 @@ static GlDynamicArray<MeshAttrib, GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB> 
 static GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> s_modelMatrices;
 static GLuint s_sceneBillboardShaderID;
 
-static std::vector<GameObject> s_objects;
+// Object classes present in scene
+static std::list<ModelObject *> s_dynamicModelObjects;
+static std::list<ModelObject *> s_staticModelObjects;
+static std::list<ModelObject *> s_volatileModelObjects;
+static std::list<GameObject *> s_genericObjects;
 
 static MeshBuilder *s_allGeometryBuilder;
 
@@ -200,50 +205,90 @@ int loadTextures(void) {
     return 0;
 }
 
-void rmObject(int index) {
-    const auto &obj = s_objects[index];
+void addVolatileModelObject(ModelObject *obj) {
+    assert(obj);
+    assert(obj->getModel());
+    assert(obj->getOptimizationClass() == GameObject::OptimizationClass::OPTIMIZE_DYNAMIC_VOLATILE);
 
-    for (int dataIndex: obj.dataIndices) {
-        s_indirectCommands.remove(dataIndex);
-        s_meshAttribs.remove(dataIndex);
-        s_modelMatrices.remove(dataIndex);
-
-        s_objects.erase(s_objects.begin() + index);
-        for (int i = index; i < s_objects.size(); ++i) {
-            for (auto it = s_objects[i].dataIndices.begin(); it != s_objects[i].dataIndices.end(); ++it) {
-                --*it;
-            }
-        }
-    }
+    s_volatileModelObjects.push_back(obj);
 }
 
-void addObject(int modelID, glm::vec3 pos, glm::vec3 vel, glm::vec3 rot) {
-    Model *model = getModelObject(modelID);
+void addDynamicObject(ModelObject *obj) {
+    assert(obj);
+    assert(obj->getModel());
+    assert(obj->getOptimizationClass() == GameObject::OptimizationClass::OPTIMIZE_DYNAMIC);
 
-    assert(model != nullptr);
+    auto instance = cloneGameObject(obj);
 
-    std::list<int> partIndices;
-
-    for (const Part &part: model->parts) {
+    //// For dynamic objects, use indirect draw buffers
+    //// Add all parts
+    for (const auto &part: instance->getModel()->parts) {
         int index = s_indirectCommands.size;
-
-        std::cout << "Add part " << index << std::endl;
-        std::cout << "Part size " << part.size << ": " << part.begin << std::endl;
-
         s_indirectCommands.append({ part.size, 1, part.begin, 0 });
-        s_meshAttribs.append({ part.materialIndex, {}, glm::vec4(vel, 0) });
-        s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), pos), rot.y, { 0, 1, 0 }));
-
-        partIndices.push_back(index);
+        s_meshAttribs.append({ part.materialIndex, {}, glm::vec4(0) });
+        //s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), instance->getGlobalPosition()), instance->getGlobalRotation()));
+        //s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), instance->getLocalPosition()), instance->getLocalRotation()));
+        s_modelMatrices.append(glm::mat4(1));
+        instance->addPartInstance(index, &s_modelMatrices[index]);
     }
 
-    s_objects.push_back({
-        pos,
-        vel,
-        rot,
-        partIndices
-    });
+    assert(instance->getPartInstances().size() == instance->getModel()->parts.size());
+
+    s_dynamicModelObjects.push_back(obj);
 }
+
+void addStaticObject(ModelObject *obj) {
+    assert(obj);
+    assert(obj->getModel());
+    assert(obj->getOptimizationClass() == GameObject::OptimizationClass::OPTIMIZE_STATIC);
+
+    s_staticModelObjects.push_back(obj);
+}
+
+//void rmObject(int index) {
+    //const auto &obj = s_objects[index];
+
+    //for (int dataIndex: obj.dataIndices) {
+        //s_indirectCommands.remove(dataIndex);
+        //s_meshAttribs.remove(dataIndex);
+        //s_modelMatrices.remove(dataIndex);
+
+        //s_objects.erase(s_objects.begin() + index);
+        //for (int i = index; i < s_objects.size(); ++i) {
+            //for (auto it = s_objects[i].dataIndices.begin(); it != s_objects[i].dataIndices.end(); ++it) {
+                //--*it;
+            //}
+        //}
+    //}
+//}
+
+//void addObject(int modelID, glm::vec3 pos, glm::vec3 vel, glm::vec3 rot) {
+    //Model *model = getModelObject(modelID);
+
+    //assert(model != nullptr);
+
+    //std::list<int> partIndices;
+
+    //for (const Part &part: model->parts) {
+        //int index = s_indirectCommands.size;
+
+        //std::cout << "Add part " << index << std::endl;
+        //std::cout << "Part size " << part.size << ": " << part.begin << std::endl;
+
+        //s_indirectCommands.append({ part.size, 1, part.begin, 0 });
+        //s_meshAttribs.append({ part.materialIndex, {}, glm::vec4(vel, 0) });
+        //s_modelMatrices.append(glm::rotate(glm::translate(glm::mat4(1), pos), rot.y, { 0, 1, 0 }));
+
+        //partIndices.push_back(index);
+    //}
+
+    //s_objects.push_back({
+        //pos,
+        //vel,
+        //rot,
+        //partIndices
+    //});
+//}
 
 int init(void) {
     s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
@@ -253,9 +298,14 @@ int init(void) {
     s_meshAttribs.generate();
     s_modelMatrices.generate();
 
+    ModelObject *obj0 = new ModelObject;
+    obj0->setOptimizationClass(GameObject::OptimizationClass::OPTIMIZE_DYNAMIC);
+    obj0->setModel(getModelObject("model.obj"));
+
     // Setup drawcalls
-    addObject(getModelIndex("model.obj"), { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
-    addObject(getModelIndex("model.obj"), { 4, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
+    addDynamicObject(obj0);
+    //addObject(getModelIndex("model.obj"), { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
+    //addObject(getModelIndex("model.obj"), { 4, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
 
     return 0;
 }
