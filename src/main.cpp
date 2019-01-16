@@ -254,10 +254,8 @@ int init(void) {
     s_modelMatrices.generate();
 
     // Setup drawcalls
-    addObject(1, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
-    addObject(0, { 20, 20, 20 }, { 0, 0, 0 }, { 0, 0, 0 });
-    addObject(getModelIndex("multipart.obj"), { 10, 10, 10 }, glm::vec3(0), glm::vec3(0));
-    addObject(getModelIndex("garage.obj"), { -10, 0, 0 }, glm::vec3(0), glm::vec3(0));
+    addObject(getModelIndex("model.obj"), { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
+    addObject(getModelIndex("model.obj"), { 4, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 });
 
     return 0;
 }
@@ -459,29 +457,29 @@ void update(double t, double dt) {
     updateLight0(t);
 
     if (s_phys) {
-        if (t - s_lastParticleTime > 0.05) {
-            s_lastParticleTime = t;
-            auto r0 = rand() / (float) RAND_MAX;
-            auto r1 = rand() / (float) RAND_MAX;
-            auto r2 = rand() / (float) RAND_MAX;
-            auto r3 = rand() / (float) RAND_MAX;
+        //if (t - s_lastParticleTime > 0.05) {
+            //s_lastParticleTime = t;
+            //auto r0 = rand() / (float) RAND_MAX;
+            //auto r1 = rand() / (float) RAND_MAX;
+            //auto r2 = rand() / (float) RAND_MAX;
+            //auto r3 = rand() / (float) RAND_MAX;
 
-            float y = 0.06;
-            float sx = 0.005;
-            float sy = 0.1;
+            //float y = 0.06;
+            //float sx = 0.005;
+            //float sy = 0.1;
 
-            addParticle({ 6 + r2 * sy * 2 - sy, 1, 6 + r3 * sy * 2 - sy }, { r0 * sx * 2 - sx, y, r1 * sx * 2 - sx }, t, 6);
-        }
+            //addParticle({ 6 + r2 * sy * 2 - sy, 1, 6 + r3 * sy * 2 - sy }, { r0 * sx * 2 - sx, y, r1 * sx * 2 - sx }, t, 6);
+        //}
 
-        for (int i = 0; i < R_PARTICLE_MAX; ++i) {
-            Particle &p = s_particles[i];
+        //for (int i = 0; i < R_PARTICLE_MAX; ++i) {
+            //Particle &p = s_particles[i];
 
-            if ((t - p.t0) - p.t > 0 || p.t < 1 || p.t0 == 0) {
-            } else {
-                p.pos += p.vel;
-                p.vel *= 0.9998;
-            }
-        }
+            //if ((t - p.t0) - p.t > 0 || p.t < 1 || p.t0 == 0) {
+            //} else {
+                //p.pos += p.vel;
+                //p.vel *= 0.9998;
+            //}
+        //}
     }
 }
 
@@ -596,25 +594,25 @@ void render(void) {
     glDisableVertexAttribArray(S_ATTRIB_TEXCOORD);
     glDisableVertexAttribArray(S_ATTRIB_VERTEX);
 
-    glBindVertexArray(s_particleGeometryArrayID);
-    glEnableVertexAttribArray(S_PARTICLE_ATTRIB_VERTEX);
-    glEnableVertexAttribArray(S_PARTICLE_ATTRIB_TEXCOORD);
-    glUseProgram(s_sceneBillboardShaderID);
-    glEnable(GL_BLEND);
-    //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-    auto l = glGetUniformLocation(s_sceneBillboardShaderID, "mTime");
-    glUniform1f(l, t);
+    //glBindVertexArray(s_particleGeometryArrayID);
+    //glEnableVertexAttribArray(S_PARTICLE_ATTRIB_VERTEX);
+    //glEnableVertexAttribArray(S_PARTICLE_ATTRIB_TEXCOORD);
+    //glUseProgram(s_sceneBillboardShaderID);
+    //glEnable(GL_BLEND);
+    //////glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    //glDepthMask(GL_FALSE);
+    //auto l = glGetUniformLocation(s_sceneBillboardShaderID, "mTime");
+    //glUniform1f(l, t);
     auto t5 = glfwGetTime();
-    glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 6, R_PARTICLE_MAX, 0);
+    //glDrawArraysInstancedBaseInstance(GL_TRIANGLES, 0, 6, R_PARTICLE_MAX, 0);
     auto t6 = glfwGetTime();
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
+    //glDepthMask(GL_TRUE);
+    //glDisable(GL_BLEND);
 
     glBindVertexArray(0);
-    glDisableVertexAttribArray(S_PARTICLE_ATTRIB_VERTEX);
-    glDisableVertexAttribArray(S_PARTICLE_ATTRIB_TEXCOORD);
+    //glDisableVertexAttribArray(S_PARTICLE_ATTRIB_VERTEX);
+    //glDisableVertexAttribArray(S_PARTICLE_ATTRIB_TEXCOORD);
 
     // END RENDER
     glUseProgram(0);
