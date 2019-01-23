@@ -74,7 +74,6 @@ static MeshBuilder *s_allGeometryBuilder;
 // Resources
 static GLuint s_textureHandleBufferID,
               s_materialBufferID;
-//static GLuint64 s_textureHandles[S_TEXTURE_COUNT * 2];
 
 // Scene-global data
 static GLuint s_sceneUniformBufferID;
@@ -722,11 +721,6 @@ void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
         ++s_renderType;
         s_renderType %= 2;
     }
-
-    if (key == GLFW_KEY_Q) {
-        qDown = !!action;
-    }
-
     if (key == GLFW_KEY_W) {
         s_walk = !!action;
     }
