@@ -34,6 +34,6 @@ const std::vector<ModelObject::PartInstance> &ModelObject::getPartInstances() co
 void ModelObject::recalcMatrix() {
     for (auto &partInstance: m_PartInstances) {
         auto tM = glm::translate(glm::mat4(1), getLocalPosition());
-        *(partInstance.modelMatrixStorage) = glm::mat4_cast(getLocalRotation()) * tM;
+        *(partInstance.modelMatrixStorage) = tM * glm::mat4_cast(getLocalRotation());
     }
 }

@@ -18,6 +18,9 @@
 
 #include "config.h"
 
+#define WINDOW_WIDTH    1920
+#define WINDOW_HEIGHT   1080
+
 struct DynamicBufferGroup {
     GlDynamicArray<DrawArraysIndirectCommand, GL_DRAW_INDIRECT_BUFFER, 0xFF> indirectCommands;
     GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> modelMatrices;
@@ -289,9 +292,7 @@ int init(void) {
     ModelObject *obj0 = new ModelObject;
     obj0->setModel(getModelObject("model.obj"));
 
-    // Setup drawcalls
     addStaticObject(obj0);
-    addDynamicObject(obj0, { 4, 0, 0 }, { 0, 0.38268, 0, 0.92387 });
 
     return 0;
 }
@@ -309,15 +310,15 @@ int setup_gl(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, s_sceneBuffer);
 
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 800, 600, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, s_sceneTextures[2]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 800, 600, 0, GL_RGB, GL_FLOAT, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGB, GL_FLOAT, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -722,6 +723,10 @@ void keyCallback(GLFWwindow *win, int key, int scan, int action, int mods) {
         s_renderType %= 2;
     }
 
+    if (key == GLFW_KEY_Q) {
+        qDown = !!action;
+    }
+
     if (key == GLFW_KEY_W) {
         s_walk = !!action;
     }
@@ -758,7 +763,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
 
-    s_window = glfwCreateWindow(800, 600, "", NULL, NULL);
+    s_window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "", NULL, NULL);
 
     if (!s_window) {
         glfwTerminate();
@@ -782,7 +787,8 @@ int main() {
         return -2;
     }
 
-    glfwSwapInterval(1);
+    // Let driver decide what's better
+    //glfwSwapInterval(0);
 
     if (setup_gl() != 0 || loadData() != 0 || init() != 0) {
         glfwTerminate();

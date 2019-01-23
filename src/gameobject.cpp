@@ -28,6 +28,10 @@ template<> void GameObject::setLocalRotation(const glm::quat &rot) {
 void GameObject::update(double t, double dt) {
 }
 
+void GameObject::rotate(glm::vec3 rot) {
+    setLocalRotation(glm::normalize(m_LocalRotation * glm::quat(rot)));
+}
+
 void GameObject::cloneFrom(GameObject *other) {
     m_IsClone = true;
     m_OptimizationClass = other->m_OptimizationClass;
