@@ -20,6 +20,8 @@ set(SOURCES src/main.cpp
             src/res/lodepng.cpp
             src/gameobject.cpp
             src/scene.cpp
+            src/renderer.cpp
+            src/input.cpp
             src/modelobject.cpp
             src/resources.cpp
             src/utils.cpp
