@@ -15,33 +15,12 @@
 #include "gldynamicarray.h"
 #include "resources.h"
 #include "modelobject.h"
+#include "scene.h"
 
 #include "config.h"
 
 #define WINDOW_WIDTH    1920
 #define WINDOW_HEIGHT   1080
-
-struct DynamicBufferGroup {
-    GlDynamicArray<DrawArraysIndirectCommand, GL_DRAW_INDIRECT_BUFFER, 0xFF> indirectCommands;
-    GlDynamicArray<glm::mat4, GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL> modelMatrices;
-    GlDynamicArray<MeshAttrib, GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB> meshAttribs;
-
-    void generate() {
-        indirectCommands.generate();
-        modelMatrices.generate();
-        meshAttribs.generate();
-    }
-
-    GLuint getSize() const {
-        return indirectCommands.size;
-    }
-
-    void bind() {
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommands.bufferID);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MODEL, modelMatrices.bufferID);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, S_SSBO_MESH_ATTRIB, meshAttribs.bufferID);
-    }
-};
 
 //
 
@@ -59,16 +38,6 @@ static GLuint s_sceneBillboardShaderID;
 static GLuint s_sceneShaderID;
 static GLuint s_allGeometryArrayID;
 
-// Object groups
-DynamicBufferGroup s_dynamicObjectBuffers;
-DynamicBufferGroup s_staticObjectBuffers;
-
-// Object classes present in scene
-static std::list<ModelObject *> s_dynamicModelObjects;
-static std::list<ModelObject *> s_staticModelObjects;
-static std::list<ModelObject *> s_volatileModelObjects;
-static std::list<GameObject *> s_genericObjects;
-
 static MeshBuilder *s_allGeometryBuilder;
 
 // Resources
@@ -85,6 +54,7 @@ static glm::vec2 s_cameraRotDelta;
 static int s_walk = 0;
 static int s_strafe = 0;
 static int s_fly = 0;
+static Scene s_scene;
 
 // Time measurements
 static double s_transferTime, s_drawCallTime;
@@ -229,69 +199,18 @@ int loadTextures(void) {
     return 0;
 }
 
-int addPartToBuffers(DynamicBufferGroup *group, const Part *p) {
-    int index = group->getSize();
-    group->indirectCommands.append({ p->size, 1, p->begin, 0 });
-    group->meshAttribs.append({ p->materialIndex, {}, glm::vec4(0) });
-    group->modelMatrices.append(glm::mat4(1));
-    return index;
-}
-
-void addDynamicObject(ModelObject *obj, glm::vec3 pos = glm::vec3(0), glm::quat rot = glm::quat()) {
-    assert(obj);
-    assert(obj->getModel());
-
-    auto instance = cloneGameObject(obj);
-    instance->setLocalPosition(pos);
-    instance->setLocalRotation(rot);
-
-    // For dynamic objects, use indirect draw buffers
-    // Add all parts
-    for (const auto &part: instance->getModel()->parts) {
-        int index = addPartToBuffers(&s_dynamicObjectBuffers, &part);
-        instance->addPartInstance(index, &s_dynamicObjectBuffers.modelMatrices[index]);
-    }
-
-    assert(instance->getPartInstances().size() == instance->getModel()->parts.size());
-
-    instance->recalcMatrix();
-
-    s_dynamicModelObjects.push_back(instance);
-}
-
-void addStaticObject(ModelObject *obj, glm::vec3 pos = glm::vec3(0), glm::quat rot = glm::quat()) {
-    assert(obj);
-    assert(obj->getModel());
-
-    auto instance = cloneGameObject(obj);
-    instance->setLocalPosition(pos);
-    instance->setLocalRotation(rot);
-
-    // For dynamic objects, use indirect draw buffers
-    // Add all parts
-    for (const auto &part: instance->getModel()->parts) {
-        int index = addPartToBuffers(&s_staticObjectBuffers, &part);
-        instance->addPartInstance(index, &s_staticObjectBuffers.modelMatrices[index]);
-    }
-
-    assert(instance->getPartInstances().size() == instance->getModel()->parts.size());
-
-    instance->recalcMatrix();
-
-    s_staticModelObjects.push_back(instance);
-}
-
 int init(void) {
     s_sceneUniformData.m_cameraPosition = glm::vec4(2, 2, 2, 1);
     s_sceneUniformData.m_cameraDestination = glm::vec4(2, 2, 3, 1);
 
-    s_staticObjectBuffers.generate();
-    s_dynamicObjectBuffers.generate();
+    s_scene.init();
+    //s_staticObjectBuffers.generate();
+    //s_dynamicObjectBuffers.generate();
 
     ModelObject *obj0 = new ModelObject;
     obj0->setModel(getModelObject("model.obj"));
 
-    addStaticObject(obj0);
+    s_scene.addStaticObject(obj0);
 
     return 0;
 }
@@ -529,11 +448,11 @@ void renderScene(void) {
     auto t1 = glfwGetTime();
 
     // Draw static objects
-    s_staticObjectBuffers.bind();
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_staticObjectBuffers.getSize(), 0);
+    s_scene.staticModelObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_scene.staticModelObjectBuffers.getSize(), 0);
     // Draw dynamic objects
-    s_dynamicObjectBuffers.bind();
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_dynamicObjectBuffers.getSize(), 0);
+    s_scene.dynamicModelObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_scene.dynamicModelObjectBuffers.getSize(), 0);
 
     s_drawCallTime += glfwGetTime() - t1;
     s_transferTime += t1 - t0;
@@ -551,11 +470,11 @@ void renderLight0(int i) {
 
     auto t1 = glfwGetTime();
     // Draw static objects
-    s_staticObjectBuffers.bind();
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_staticObjectBuffers.getSize(), 0);
+    s_scene.staticModelObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_scene.staticModelObjectBuffers.getSize(), 0);
     // Draw dynamic objects
-    s_dynamicObjectBuffers.bind();
-    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_dynamicObjectBuffers.getSize(), 0);
+    s_scene.dynamicModelObjectBuffers.bind();
+    glMultiDrawArraysIndirect(s_renderType ? GL_LINES : GL_TRIANGLES, 0, s_scene.dynamicModelObjectBuffers.getSize(), 0);
 
     s_drawCallTime += glfwGetTime() - t1;
     s_transferTime += t1 - t0;

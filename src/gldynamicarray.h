@@ -1,6 +1,7 @@
 #pragma once
 #include <GL/glew.h>
 #include <glm/glm.hpp>
+#include <iostream>
 #include "utils.h"
 
 template<typename T, GLenum P, GLuint B = 0xFF> struct GlDynamicArray {
