@@ -327,6 +327,37 @@ int Renderer::loadTextures() {
 
 ////
 
+void updateLight0(double t) {
+    if (Renderer::width != 0 && Renderer::height != 0) {
+        s_light0UniformData.m_lightMatrix = glm::lookAt(
+            glm::vec3(s_light0UniformData.m_lightPosition),
+            glm::vec3(0, 0, 0),
+            glm::vec3(0, 1, 0)
+        );
+
+        auto lightP = s_light0UniformData.m_lightMatrix * glm::vec4(glm::vec3(s_camera.uniformData.m_cameraPosition), 1);
+        float cascades[S_SHADOW_CASCADES] {
+            20,
+            40,
+            80,
+            100
+        };
+
+        for (int i = 0; i < S_SHADOW_CASCADES; ++i) {
+            s_light0UniformData.m_projectionMatrix[i] = glm::ortho(
+                lightP.x - cascades[i],
+                lightP.x + cascades[i],
+                lightP.y - cascades[i],
+                lightP.y + cascades[i],
+                -lightP.z - cascades[i],
+                -lightP.z + cascades[i]
+            );
+        }
+    }
+}
+
+////
+
 void renderScene(void) {
     auto t0 = glfwGetTime();
     glUseProgram(s_sceneShaderID);
@@ -402,7 +433,7 @@ void Renderer::render() {
     auto dt = t - s_lastTime;
     s_lastTime = t;
 
-    //update(t, dt);
+    updateLight0(t);
 
     auto t0 = glfwGetTime();
     glNamedBufferData(s_sceneUniformBufferID, sizeof(SceneUniformData), &s_camera.uniformData, GL_DYNAMIC_DRAW);
@@ -506,7 +537,6 @@ int Renderer::init() {
     }
 
     glfwSetWindowSizeCallback(s_window, windowSizeCallback);
-    //glfwSetCursorPosCallback(s_window, cursorPosCallback);
     glfwSetKeyCallback(s_window, &Input::keyCallback);
 
     glfwMakeContextCurrent(s_window);
@@ -540,38 +570,7 @@ int Renderer::init() {
     s_camera.uniformData.m_cameraDestination = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
     s_camera.uniformData.m_projectionMatrix = glm::perspective(45.0f, (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT, 0.1f, 100.0f);
     s_camera.recalcMatrix();
-    /*auto t0 = glfwGetTime();*/
-    /*double swapTime = 0;*/
-    /*int frames = 0;*/
-
     s_scene.init();
-    /*while (!glfwWindowShouldClose(s_window)) {*/
-        /*auto t1 = glfwGetTime();*/
-        /*if (t1 - t0 > 1) {*/
-            /*std::cout << frames << " frames" << std::endl;*/
-            /*std::cout << s_frameTimeSum * 1000 << " ms" << std::endl;*/
-            /*std::cout << (s_frameTimeSum / frames) * 1000 << " ms/frame" << std::endl;*/
-            /*std::cout << (s_drawCallTime / frames) * 1000 << " ms/draw" << std::endl;*/
-            /*std::cout << (s_transferTime / frames) * 1000 << " ms/xfer" << std::endl;*/
-            /*std::cout << (swapTime / frames) * 1000 << " ms/swap" << std::endl;*/
-            /*t0 = t1;*/
-            /*frames = 0;*/
-            /*s_frameTimeSum = 0;*/
-            /*s_drawCallTime = 0;*/
-            /*s_transferTime = 0;*/
-            /*swapTime = 0;*/
-        /*}*/
-
-        /*render();*/
-        /*++frames;*/
-
-        /*t1 = glfwGetTime();*/
-        /*glfwSwapBuffers(s_window);*/
-        /*swapTime += glfwGetTime() - t1;*/
-        /*glfwPollEvents();*/
-    /*}*/
-
-    /*glfwTerminate();*/
 
     return 0;
 }
